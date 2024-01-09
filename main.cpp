@@ -18,12 +18,13 @@ const int SCREEN_HEIGHT = 840;
 const int levelWidth = 9;
 const int levelHeight = 33;
 
-const int xModifier = 120;
+const int xModifier = 120; //level to actual position
 const int yModifier = 16;
 
-const int yPlatformOffset = 10;
-const int yLadderOffset = 8;
-const int yPlayerOffset = 8;
+const int yPlatformOffset = 15; // spawn
+const int yLadderOffset = 13;
+const int yPlayerOffset = 13;
+const int yKongOffset = 12;
 
 const char* menuText = "WELCOME TO THE GAME";
 const double menuTextScale = 5.0;
@@ -32,6 +33,8 @@ const int titleFlag = 10;
 const int pseudonymStartPlace = 50;
 
 const double jumpStrength = -50.0;
+
+const int barrelCount = 5;
 
 
 typedef struct menu_t
@@ -69,6 +72,31 @@ typedef struct player_t
 	int playerX;
 	int playerY; // im mniejszy tym wyzej
 	double verticalVelocity; 
+	double horizontalVelocity;
+	hitbox_t hitbox;
+	int ladderFlag;
+};
+
+
+typedef struct kong_t
+{
+	SDL_Surface* sprite;
+	int kongWidth;
+	int kongHeight;
+	int kongX;
+	int kongY;
+	double timer;
+};
+
+
+typedef struct barrel_t
+{
+	SDL_Surface* sprite;
+	int barrelWidth;
+	int barrelHeight;
+	int barrelX;
+	int barrelY;
+	double verticalVelocity;
 	double horizontalVelocity;
 	hitbox_t hitbox;
 	int ladderFlag;
@@ -116,6 +144,7 @@ typedef struct level_t
 	int* laddersX;
 	int* laddersY;
 	int playerSpawn[2];
+	int kongSpawn[2];
 	char rampColor[10];
 };
 
@@ -141,13 +170,17 @@ typedef struct items_t
 	player_t player;
 	platform_t** platform;
 	ladder_t** ladder;
+	barrel_t* barrel;
 };
 
 
-void initAll(screen_t* screen, colors_t* colors, player_t* player, platform_t** platform, level_t* level, ladder_t** ladder);
+void initAll(screen_t* screen, colors_t* colors, player_t* player, platform_t** platform, level_t* level, ladder_t** ladder, kong_t* kong);
 
 void initStatic(screen_t* screen, colors_t* colors);
-void initDynamic(screen_t* screen, player_t* player, platform_t** platform, level_t* level, int levelNum, ladder_t** ladder);
+void initDynamic(screen_t* screen, player_t* player, platform_t** platform, level_t* level, int levelNum, ladder_t** ladder, kong_t* kong);
+
+void initWindowAndRenderer(screen_t* screen);
+SDL_Surface* initBMP(screen_t* screen, char* path);
 
 #pragma region menu
 void menu(screen_t screen, colors_t colors, int* levelNumber);
@@ -194,6 +227,19 @@ void updatePlayerPosition(player_t* player, double valueX, double valueY);
 void updatePlayerHitbox(player_t* player, double valueX, double valueY);
 #pragma endregion
 
+#pragma region enemies
+void initKong(kong_t* kong, screen_t screen, level_t level);
+void initKongSprite(kong_t* kong, screen_t screen);
+void initKongSpawn(kong_t* kong, level_t level);
+
+void initBarrels(barrel_t** barrel, screen_t screen);
+void initBarrelSprite(barrel_t* barrel, screen_t screen);
+void initBarrelSpawn(barrel_t* barrel);
+void initBarrelHitbox(barrel_t* barrel);
+
+void handleBarrelThrow(kong_t* kong);
+#pragma endregion
+
 #pragma region level
 void initLevel(level_t* level, int levelNum);
 char* handleFilePath(int levelNum);
@@ -215,22 +261,11 @@ void drawPixel(SDL_Surface* surface, int x, int y, Uint32 color);
 void drawLine(screen_t screen, int x, int y, int l, int dx, int dy, Uint32 color);
 void drawRectangle(screen_t screen, int x, int y, int width, int height, Uint32 outlineColor, Uint32 fillColor);
 void drawGameMenu(screen_t screen, colors_t colors, const char* menuText);
-void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level);
-void draw(screen_t screen, colors_t colors, player_t* player, platform_t* platform, ladder_t* ladder, level_t level);
+void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong);
+void draw(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong);
 // rysowanie linii o d³ugoœci l w pionie (gdy dx = 0, dy = 1) 
 // b¹dŸ poziomie (gdy dx = 1, dy = 0)
 // draw a vertical (when dx = 0, dy = 1) or horizontal (when dx = 1, dy = 0) line
-#pragma endregion
-
-void initWindowAndRenderer(screen_t* screen);
-
-SDL_Surface* initBMP(screen_t* screen, char* path);
-
-#pragma region free
-void freeAll(screen_t* screen, platform_t** platform);
-void freeSurfaces(screen_t* screen);
-void freePlatforms(platform_t** platform);
-void freeLevelTxt(char** levelTxt);
 #pragma endregion
 
 #pragma region movementAppliance
@@ -239,7 +274,7 @@ void handleY(player_t player, double* distanceY, double delta);
 void handleXY(player_t player, double* distanceX, double* distanceY, double delta);
 #pragma endregion
 
-void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event event, colors_t colors, platform_t* platform, ladder_t* ladder, level_t level);
+void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event event, colors_t colors, platform_t* platform, ladder_t* ladder, level_t level, kong_t* kong);
 
 #pragma region events
 void eventHandler(int* quit, player_t* player, platform_t* platform, ladder_t* ladder, SDL_Event event, level_t level);
@@ -265,6 +300,14 @@ void handleLadder(player_t* player, ladder_t* ladder, level_t level, char sign);
 void enterLadder(player_t* player, double modifier);
 #pragma endregion
 
+#pragma region free
+void freeAll(screen_t* screen, platform_t** platform, ladder_t* ladder, level_t level);
+void freeSurfaces(screen_t* screen);
+void freePlatforms(platform_t** platform, level_t level);
+void freeLadders(ladder_t** ladder, level_t level);
+void freeLevelTxt(char** levelTxt);
+#pragma endregion
+
 #ifdef __cplusplus
 extern "C"
 #endif
@@ -280,13 +323,13 @@ int main(int argc, char** argv)
 	platform_t* platform;
 	level_t level;
 	ladder_t* ladder;
+	kong_t kong;
 
-
-	initAll(&screen, &colors, &mario, &platform, &level, &ladder);
+	initAll(&screen, &colors, &mario, &platform, &level, &ladder, &kong);
 
 	char text[128];
 
-	gameLoop(t1, screen, &mario, text, event, colors, platform, ladder, level);
+	gameLoop(t1, screen, &mario, text, event, colors, platform, ladder, level, &kong);
 
 	freeSurfaces(&screen);
 	SDL_Quit();
@@ -295,7 +338,7 @@ int main(int argc, char** argv)
 }
 
 
-void initAll(screen_t* screen, colors_t* colors, player_t* player, platform_t** platform, level_t* level, ladder_t** ladder)
+void initAll(screen_t* screen, colors_t* colors, player_t* player, platform_t** platform, level_t* level, ladder_t** ladder, kong_t* kong)
 {
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0)
 	{
@@ -308,7 +351,7 @@ void initAll(screen_t* screen, colors_t* colors, player_t* player, platform_t** 
 	int levelNumber;
 	menu(*screen, *colors, &levelNumber);
 
-	initDynamic(screen, player, platform, level, levelNumber, ladder);
+	initDynamic(screen, player, platform, level, levelNumber, ladder, kong);
 }
 
 
@@ -344,12 +387,13 @@ void menu(screen_t screen, colors_t colors, int* levelNumber)
 }
 
 
-void initDynamic(screen_t* screen, player_t* player, platform_t** platform, level_t* level, int levelNum, ladder_t** ladder)
+void initDynamic(screen_t* screen, player_t* player, platform_t** platform, level_t* level, int levelNum, ladder_t** ladder, kong_t* kong)
 {
 	initLevel(level, levelNum);
 	initPlatform(platform, *screen, *level);
 	initPlayer(player, *screen, *level);
 	initLadder(ladder, *screen, *level);
+	initKong(kong, *screen, *level);
 }
 
 
@@ -792,7 +836,7 @@ void writeLevelInfo(char** levelTxt, const char* filePath, level_t* level)
 
 			fileChar = fgetc(file);
 
-			if (fileChar == '#' || fileChar == 'X' || fileChar == 'O' || fileChar == 'H')
+			if (fileChar == '#' || fileChar == 'X' || fileChar == 'O' || fileChar == 'H' || fileChar == 'K')
 				levelTxt[i][j] = fileChar;
 
 			else
@@ -889,6 +933,11 @@ void interpretItemsPosition(level_t* level, char** levelTxt)
 					level->playerSpawn[1] = (j + 1) * xModifier;
 					break;
 
+				case 'K':
+					level->kongSpawn[0] = (i + yKongOffset) * yModifier;
+					level->kongSpawn[1] = (j + 1) * xModifier;
+					break;
+
 				case 'H':
 					level->laddersY[ladderCounter] = (i + yLadderOffset) * yModifier;
 					level->laddersX[ladderCounter] = (j + 1) * xModifier;
@@ -930,6 +979,65 @@ void initWindowAndRenderer(screen_t* screen)
 }
 
 
+void initKong(kong_t* kong, screen_t screen, level_t level)
+{
+	initKongSprite(kong, screen);
+	initKongSpawn(kong, level);
+	kong->timer = 0;
+}
+
+
+void initKongSprite(kong_t* kong, screen_t screen)
+{
+	kong->sprite = initBMP(&screen, "./DonkeyKongTextures2/kong.bmp");
+
+	kong->kongWidth = kong->sprite->w;
+	kong->kongHeight = kong->sprite->h;
+}
+
+
+void initKongSpawn(kong_t* kong, level_t level)
+{
+	kong->kongY = level.kongSpawn[0];
+	kong->kongX = level.kongSpawn[1];
+}
+
+
+void initBarrels(barrel_t** barrel, screen_t screen)
+{
+	for (int i = 0; i < barrelCount; i++)
+	{
+		initBarrelSprite(&(*barrel)[i], screen);
+		initBarrelSpawn(&(*barrel)[i]);
+		initBarrelHitbox(&(*barrel)[i]);
+	}
+}
+
+
+void initBarrelSprite(barrel_t* barrel, screen_t screen)
+{
+	barrel->sprite = initBMP(&screen, "./DonkeyKongTextures2/Barrel.bmp");
+	barrel->barrelWidth = barrel->sprite->w;
+	barrel->barrelWidth = barrel->sprite->w;
+}
+
+
+void initBarrelSpawn(barrel_t* barrel)
+{
+	barrel->barrelX = SCREEN_WIDTH + 200;
+	barrel->barrelY = SCREEN_HEIGHT + 200;
+}
+
+
+void initBarrelHitbox(barrel_t* barrel)
+{
+	barrel->hitbox.top = barrel->barrelY - (barrel->barrelHeight / 2);
+	barrel->hitbox.bottom = barrel->barrelY + (barrel->barrelHeight / 2);
+	barrel->hitbox.left = barrel->barrelX - (barrel->barrelWidth / 2);
+	barrel->hitbox.right = barrel->barrelX - (barrel->barrelWidth / 2);
+}
+
+
 SDL_Surface* initBMP(screen_t* screen, char* path)
 {
 	SDL_Surface* bmp = SDL_LoadBMP(path);
@@ -949,10 +1057,11 @@ SDL_Surface* initBMP(screen_t* screen, char* path)
 }
 
 
-void freeAll(screen_t* screen, platform_t** platform)
+void freeAll(screen_t* screen, platform_t** platform, ladder_t** ladder, level_t level)
 {
 	freeSurfaces(screen);
-	freePlatforms(platform);
+	freePlatforms(platform, level);
+	freeLadders(ladder, level);
 }
 
 
@@ -966,9 +1075,21 @@ void freeSurfaces(screen_t* screen)
 }
 
 
-void freePlatforms(platform_t** platform)
+void freePlatforms(platform_t** platform, level_t level)
 {
+	for (int i = 0; i < level.platformCount; i++)
+		free(platform[i]);
+
 	free(platform);
+}
+
+
+void freeLadders(ladder_t** ladder, level_t level)
+{
+	for (int i = 0; i < level.ladderCount; i++)
+		free(ladder[i]);
+
+	free(ladder);
 }
 
 
@@ -1060,7 +1181,7 @@ void drawGameMenu(screen_t screen, colors_t colors, const char* menuText)
 }
 
 
-void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level)
+void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong)
 {
 	SDL_FillRect(screen.screen, NULL, colors.black);
 
@@ -1071,6 +1192,8 @@ void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* pl
 		drawSurface(screen, ladder[i].sprite, ladder[i].ladderX, ladder[i].ladderY);
 
 	drawSurface(screen, player.sprite, player.playerX, player.playerY);
+
+	drawSurface(screen, kong.sprite, kong.kongX, kong.kongY);
 
 	drawGameMenu(screen, colors, menuText);
 }
@@ -1084,9 +1207,9 @@ void updateScreen(screen_t screen)
 }
 
 
-void draw(screen_t screen, colors_t colors, player_t* player, platform_t* platform, ladder_t* ladder, level_t level)
+void draw(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong)
 {
-	drawScene(screen, colors, *player, platform, ladder, level);
+	drawScene(screen, colors, player, platform, ladder, level, kong);
 	updateScreen(screen);
 }
 
@@ -1115,7 +1238,7 @@ void handleXY(player_t player, double* distanceX, double* distanceY, double delt
 }
 
 
-void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event event, colors_t colors, platform_t* platform, ladder_t* ladder, level_t level)
+void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event event, colors_t colors, platform_t* platform, ladder_t* ladder, level_t level, kong_t* kong)
 {
 	int quit = 0;
 	double t2, delta, frames = 0, distanceX = 0, distanceY = 0;
@@ -1125,17 +1248,28 @@ void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event e
 		t2 = SDL_GetTicks();
 		delta = (t2 - t1) * 0.001;
 		t1 = t2;
+		kong->timer += delta;
 
 		physics(player, platform, ladder, level, delta);
 		handleXY(*player, &distanceX, &distanceY, delta);
 
-		draw(screen, colors, player, platform, ladder, level);
+		draw(screen, colors, *player, platform, ladder, level, *kong);
 
 		eventHandler(&quit, player, platform, ladder, event, level);
-
+		handleBarrelThrow(kong);
 		updatePlayerPosition(player, distanceX, distanceY);
 
 		frames++;
+	}
+}
+
+
+void handleBarrelThrow(kong_t* kong)
+{
+	if (kong->timer == 5.0)
+	{
+		kong->timer = 0;
+		printf("siema");
 	}
 }
 
@@ -1442,13 +1576,10 @@ int detectColissionX(player_t* player, platform_t* platform, level_t level, doub
 			distance = L - playerPos;
 		}
 
-		if(checkInRange(player->playerY, T, B) == 0 || checkInRange(player->hitbox.top, T, B) == 0) //|| checkInRange(player->hitbox.bottom, T, B) == 0)
+		if(checkInRange(player->playerY, T, B) == 0 || checkInRange(player->hitbox.top, T, B) == 0)
 		{ 
 			if (checkInRange(playerPos + modifier * player->horizontalVelocity * delta, L, R) == 0)
-			{
-				updatePlayerPosition(player, distance, 0);
 				return 1;
-			}
 		}
 	}
 
