@@ -101,6 +101,7 @@ typedef struct barrel_t
 	double horizontalVelocity;
 	hitbox_t hitbox;
 	int ladderFlag;
+	int throwFlag;
 };
 
 
@@ -218,7 +219,7 @@ ladder_t* allocateLadders(level_t level);
 #pragma endregion
 
 #pragma region player
-void initPlayer(player_t* player, screen_t screen, level_t level);//player initialization
+void initPlayer(player_t* player, screen_t screen, level_t level);
 void initPlayerSprite(player_t* player, screen_t screen);
 void initPlayerSpawn(player_t* player, level_t level);
 void initPlayerVelocity(player_t* player);
@@ -271,9 +272,9 @@ void drawSurface(screen_t screen, SDL_Surface* sprite, int x, int y);
 void drawPixel(SDL_Surface* surface, int x, int y, Uint32 color);
 void drawLine(screen_t screen, int x, int y, int l, int dx, int dy, Uint32 color);
 void drawRectangle(screen_t screen, int x, int y, int width, int height, Uint32 outlineColor, Uint32 fillColor);
-void drawGameMenu(screen_t screen, colors_t colors, const char* menuText);
-void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel);
-void draw(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel);
+void drawGameMenu(screen_t screen, colors_t colors, const char* menuText, double worldTime);
+void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel, double worldTime);
+void draw(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel, double worldTime);
 // rysowanie linii o d³ugoœci l w pionie (gdy dx = 0, dy = 1) 
 // b¹dŸ poziomie (gdy dx = 1, dy = 0)
 // draw a vertical (when dx = 0, dy = 1) or horizontal (when dx = 1, dy = 0) line
@@ -293,7 +294,9 @@ void handleKeyDown(SDL_Event event, int* quit, player_t* player, platform_t* pla
 #pragma endregion
 
 #pragma region physics
-void physics(player_t* player, platform_t* platform, ladder_t* ladder, level_t level, double delta);
+void physics(player_t* player, platform_t* platform, ladder_t* ladder, barrel_t** barrel, level_t level, double delta);
+
+void playerPhysics(player_t* player, platform_t* platform, ladder_t* ladder, level_t level, double delta);
 void gravity(player_t* player, platform_t* platform, level_t level);
 int detectColissionX(player_t* player, platform_t* platform, level_t level, double delta);
 int detectBottomColissionY(player_t player, platform_t* platform, level_t level);
@@ -302,6 +305,11 @@ int checkInRange(int x, int smaller, int greater);
 int canEnterLadder(player_t player, ladder_t* ladder, level_t level, double modifier);
 int isOnLadder(player_t player, ladder_t* ladder, level_t level);
 int checkLadderPlayerY(player_t player, ladder_t ladder);
+
+void barrelPhysics(barrel_t** barrel, platform_t* platform, ladder_t* ladder, level_t level, double delta);
+void gravityBarrel(barrel_t* barrel, platform_t* platform, level_t level, double delta);
+int detectBarrelColissionX(barrel_t barrel, platform_t* platform, level_t level, double delta);
+int detectBottomBarrelColissionY(barrel_t barrel, platform_t* platform, level_t level, double delta, int* y);
 #pragma endregion
 
 #pragma region movement
@@ -326,7 +334,6 @@ extern "C"
 
 int main(int argc, char** argv) 
 {
-	int t1 = SDL_GetTicks();
 	SDL_Event event = { 0 };
 	screen_t screen;
 	colors_t colors;
@@ -340,6 +347,7 @@ int main(int argc, char** argv)
 	initAll(&screen, &colors, &mario, &platform, &level, &ladder, &kong, &barrel);
 
 	char text[128];
+	int t1 = SDL_GetTicks();
 
 	gameLoop(t1, screen, &mario, text, event, colors, platform, ladder, level, &kong, &barrel);
 
@@ -1025,6 +1033,8 @@ void initBarrels(barrel_t** barrel, screen_t screen)
 		initBarrelSpawn(&(*barrel)[i]);
 		initBarrelHitbox(&(*barrel)[i]);
 		initBarrelVelocity(&(*barrel)[i]);
+		(&(*barrel)[i])->ladderFlag = 0;
+		(&(*barrel)[i])->throwFlag = 0;
 	}
 }
 
@@ -1046,7 +1056,7 @@ void initBarrelSprite(barrel_t* barrel, screen_t screen)
 {
 	barrel->sprite = initBMP(&screen, "./DonkeyKongTextures2/Barrel.bmp");
 	barrel->barrelWidth = barrel->sprite->w;
-	barrel->barrelWidth = barrel->sprite->w;
+	barrel->barrelHeight = barrel->sprite->h;
 }
 
 
@@ -1203,14 +1213,19 @@ void drawLine(screen_t screen, int x, int y, int l, int dx, int dy, Uint32 color
 }
 
 
-void drawGameMenu(screen_t screen, colors_t colors, const char* menuText)
+void drawGameMenu(screen_t screen, colors_t colors, const char* menuText, double worldTime)
 {
+	char text[128];
+
 	drawRectangle(screen, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT/10, colors.red, colors.black);
 	drawString(screen, SCREEN_WIDTH/2 - 4 * strlen(menuText), SCREEN_HEIGHT/10/2, menuText, 1);
+
+	sprintf(text, "%.1lf", worldTime);
+	drawString(screen, SCREEN_WIDTH / 2 - 4 * strlen(text), SCREEN_HEIGHT / 15 / 2, text, 1);
 }
 
 
-void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel)
+void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel, double worldTime)
 {
 	SDL_FillRect(screen.screen, NULL, colors.black);
 
@@ -1227,7 +1242,7 @@ void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* pl
 	for (int i = 0; i < barrelCount; i++)
 		drawSurface(screen, barrel[i].sprite, barrel[i].barrelX, barrel[i].barrelY);
 
-	drawGameMenu(screen, colors, menuText);
+	drawGameMenu(screen, colors, menuText, worldTime);
 }
 
 
@@ -1239,9 +1254,9 @@ void updateScreen(screen_t screen)
 }
 
 
-void draw(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel)
+void draw(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel, double worldTime)
 {
-	drawScene(screen, colors, player, platform, ladder, level, kong, barrel);
+	drawScene(screen, colors, player, platform, ladder, level, kong, barrel, worldTime);
 	updateScreen(screen);
 }
 
@@ -1251,7 +1266,7 @@ void handleX(player_t player, double* distanceX, double delta)
 	*distanceX = player.horizontalVelocity * delta;
 
 	if (*distanceX > 0)
-		*distanceX += 1.0;
+		*distanceX += 0.8;
 }
 
 
@@ -1260,7 +1275,7 @@ void handleY(player_t player, double* distanceY, double delta)
 	*distanceY = player.verticalVelocity * delta;
 
 	if (*distanceY > 0)
-		*distanceY += 1;
+		*distanceY += 1.0;
 }
 
 
@@ -1273,32 +1288,47 @@ void handleXY(player_t player, double* distanceX, double* distanceY, double delt
 
 void handleBarrelXY(barrel_t barrel, double* barrelDistanceX, double* barrelDistanceY, double delta)
 {
-	*barrelDistanceY = barrel.verticalVelocity * delta;
-	*barrelDistanceX = barrel.horizontalVelocity * delta + 1.0;
+	if (barrel.verticalVelocity > 0)
+		*barrelDistanceY = barrel.verticalVelocity * delta + 1;
+
+	if (barrel.horizontalVelocity < 0)
+		*barrelDistanceX = barrel.horizontalVelocity * delta;
+
+	else if (barrel.horizontalVelocity > 0)
+		*barrelDistanceX = barrel.horizontalVelocity * delta + 1.0;
+
+	else
+		*barrelDistanceX = 0;
 }
 
 
 void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event event, colors_t colors, platform_t* platform, ladder_t* ladder, level_t level, kong_t* kong, barrel_t** barrel)
 {
 	int quit = 0;
-	double t2, delta, frames = 0, distanceX = 0, distanceY = 0, barrelDistanceX = 0, barrelDistanceY = 0;
+	double t2, delta, frames = 0, distanceX = 0, distanceY = 0, worldTime = 120;
 
 	while (!quit)
 	{
 		t2 = SDL_GetTicks();
-		delta = (t2 - t1) * 0.001;
+		delta = fmin((t2 - t1) * 0.001, 0.002);
 		t1 = t2;
 		kong->timer += delta;
+		if (worldTime <= 0)
+			quit = 1;
+		else
+			worldTime -= delta;
 
-		physics(player, platform, ladder, level, delta);
+		handleBarrelThrow(kong, barrel);
+		physics(player, platform, ladder, barrel, level, delta);
+
 		handleXY(*player, &distanceX, &distanceY, delta);
+		updateBarrelsPosition(barrel, delta);
 
-		draw(screen, colors, *player, platform, ladder, level, *kong, *barrel);
+		draw(screen, colors, *player, platform, ladder, level, *kong, *barrel, worldTime);
 
 		eventHandler(&quit, player, platform, ladder, event, level);
-		handleBarrelThrow(kong, barrel);
+		
 		updatePlayerPosition(player, distanceX, distanceY);
-		updateBarrelsPosition(barrel, delta);
 
 		frames++;
 	}
@@ -1312,11 +1342,13 @@ void handleBarrelThrow(kong_t* kong, barrel_t** barrel)
 		kong->timer = 0;
 		int index = calculateBarrelKongDistance(*barrel, *kong);
 		int x = barrelKongX((*barrel)[index], *kong);
-		int y = barrelKongY((*barrel)[index], *kong);
+		int y = barrelKongY((*barrel)[index], *kong) + kong->kongHeight / 3 - (*barrel)[index].barrelHeight / 2;
 
 		updateBarrelPosition(&(*barrel)[index],x, y);
 
 		(& (*barrel)[index])->horizontalVelocity = barrelSpeed;
+		(&(*barrel)[index])->verticalVelocity = 0;
+		(&(*barrel)[index])->throwFlag = 1;
 	}
 }
 
@@ -1563,7 +1595,32 @@ int checkInRange(int x, int smaller, int greater) //0 jesli tak 1 jesli nie
 }
 
 
-void physics(player_t* player, platform_t* platform, ladder_t* ladder, level_t level, double delta)
+void physics(player_t* player, platform_t* platform, ladder_t* ladder, barrel_t** barrel, level_t level, double delta)
+{
+	playerPhysics(player, platform, ladder, level, delta);
+	barrelPhysics(barrel, platform, ladder, level, delta);
+}
+
+
+void barrelPhysics(barrel_t** barrel, platform_t* platform, ladder_t* ladder, level_t level, double delta)
+{
+	for (int i = 0; i < barrelCount; i++)
+	{
+		if ((*barrel)[i].throwFlag == 0)
+			continue;
+
+		if ((*barrel)[i].ladderFlag == 0)
+		{
+			if (detectBarrelColissionX((*barrel)[i], platform, level, delta) == 1)
+				(&(*barrel)[i])->horizontalVelocity = -1.0 * (&(*barrel)[i])->horizontalVelocity;
+		}
+
+		gravityBarrel(&(*barrel)[i], platform, level, delta);
+	}
+}
+
+
+void playerPhysics(player_t* player, platform_t* platform, ladder_t* ladder, level_t level, double delta)
 {
 	if (player->ladderFlag == 1 && isOnLadder(*player, ladder, level) != 0) //check if still on ladder
 		player->ladderFlag = 0;
@@ -1589,7 +1646,7 @@ void gravity(player_t* player, platform_t* platform, level_t level)
 	int colissionFlag = detectBottomColissionY(*player, platform, level);
 
 	if (player->ladderFlag == 0 && colissionFlag == 0)
-		player->verticalVelocity += 1;
+		player->verticalVelocity += 1.0;
 
 	if (colissionFlag == 1)
 	{
@@ -1670,16 +1727,6 @@ int detectColissionX(player_t* player, platform_t* platform, level_t level, doub
 	{
 		int T = platform[i].hitbox.top, B = platform[i].hitbox.bottom,  L = platform[i].hitbox.left, R = platform[i].hitbox.right;
 
-		if (player->horizontalVelocity < 0)
-		{
-			distance = R - playerPos;
-		}
-
-		else if (player->horizontalVelocity >= 0)
-		{
-			distance = L - playerPos;
-		}
-
 		if(checkInRange(player->playerY, T, B) == 0 || checkInRange(player->hitbox.top, T, B) == 0)
 		{ 
 			if (checkInRange(playerPos + modifier * player->horizontalVelocity * delta, L, R) == 0)
@@ -1688,4 +1735,84 @@ int detectColissionX(player_t* player, platform_t* platform, level_t level, doub
 	}
 
 	return 0;
+}
+
+
+int detectBottomBarrelColissionY(barrel_t barrel, platform_t* platform, level_t level, double delta, int* y)
+{
+	for (int i = 0; i < level.platformCount; i++)
+	{
+		int L = platform[i].hitbox.left, R = platform[i].hitbox.right, T = platform[i].hitbox.top, B = platform[i].hitbox.bottom;
+
+		if (barrel.hitbox.bottom != platform[i].hitbox.top && checkInRange(barrel.hitbox.bottom + int(barrel.verticalVelocity * delta), T, B) != 0)
+			continue;
+
+		else if (checkInRange(barrel.hitbox.left, L, R) == 1 || checkInRange(barrel.hitbox.right, L, R) == 1 && checkInRange(barrel.barrelX, L, R) == 1)
+			continue;
+
+		else
+		{
+			*y = platform[i].hitbox.top - barrel.hitbox.bottom;
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+
+int detectBarrelColissionX(barrel_t barrel, platform_t* platform, level_t level, double delta)
+{
+	int barrelPos, distance;
+	double modifier;
+
+	if (barrel.horizontalVelocity < 0)
+	{
+		modifier = -1.0;
+		barrelPos = barrel.hitbox.left;
+	}
+
+	else if (barrel.horizontalVelocity >= 0)
+	{
+		modifier = 1.0;
+		barrelPos = barrel.hitbox.right;
+	}
+
+	else
+	{
+		perror("Error - unknown side");
+		exit(EXIT_FAILURE);
+	}
+
+	for (int i = 0; i < level.platformCount; i++)
+	{
+		int T = platform[i].hitbox.top, B = platform[i].hitbox.bottom, L = platform[i].hitbox.left, R = platform[i].hitbox.right;
+
+		if (checkInRange(barrel.barrelY, T, B) == 0 || checkInRange(barrel.hitbox.top, T, B) == 0)
+		{
+			if (checkInRange(barrelPos + modifier * barrel.horizontalVelocity * delta, L, R) == 0)
+				return 1;
+		}
+	}
+
+	return 0;
+}
+
+
+void gravityBarrel(barrel_t* barrel, platform_t* platform, level_t level, double delta)
+{
+	if (barrel->throwFlag == 1)
+	{
+		int y, colissionFlag = detectBottomBarrelColissionY(*barrel, platform, level, delta, &y);
+
+		if (barrel->ladderFlag == 0 && colissionFlag == 0)
+			barrel->verticalVelocity += 1.0;
+
+		if (colissionFlag == 1)
+		{
+			updateBarrelPosition(barrel, 0, y);
+			barrel->verticalVelocity = 0;
+			barrel->ladderFlag = 0;
+		}
+	}
 }
