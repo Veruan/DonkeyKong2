@@ -6,10 +6,10 @@
 #include <string.h>
 #include <stdlib.h>
 
-extern "C" 
+extern "C"
 {
-	#include"./SDL2-2.0.10/include/SDL.h"
-	#include"./SDL2-2.0.10/include/SDL_main.h"
+#include"./SDL2-2.0.10/include/SDL.h"
+#include"./SDL2-2.0.10/include/SDL_main.h"
 }
 
 const int SCREEN_WIDTH = 1200; //pixels
@@ -72,7 +72,7 @@ typedef struct player_t
 	int playerHeight;
 	int playerX;
 	int playerY; // im mniejszy tym wyzej
-	double verticalVelocity; 
+	double verticalVelocity;
 	double horizontalVelocity;
 	hitbox_t hitbox;
 	int ladderFlag;
@@ -294,7 +294,7 @@ void handleKeyDown(SDL_Event event, int* quit, player_t* player, platform_t* pla
 #pragma endregion
 
 #pragma region physics
-void physics(player_t* player, platform_t* platform, ladder_t* ladder, barrel_t** barrel, level_t level, double delta);
+void physics(player_t* player, platform_t* platform, ladder_t* ladder, barrel_t** barrel, level_t level, double delta, int* quit);
 
 void playerPhysics(player_t* player, platform_t* platform, ladder_t* ladder, level_t level, double delta);
 void gravity(player_t* player, platform_t* platform, level_t level);
@@ -310,6 +310,8 @@ void barrelPhysics(barrel_t** barrel, platform_t* platform, ladder_t* ladder, le
 void gravityBarrel(barrel_t* barrel, platform_t* platform, level_t level, double delta);
 int detectBarrelColissionX(barrel_t barrel, platform_t* platform, level_t level, double delta);
 int detectBottomBarrelColissionY(barrel_t barrel, platform_t* platform, level_t level, double delta, int* y);
+
+int detectPlayerBarrelCollision(barrel_t barrel, player_t player, double delta);
 #pragma endregion
 
 #pragma region movement
@@ -332,7 +334,7 @@ extern "C"
 #endif
 
 
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {
 	SDL_Event event = { 0 };
 	screen_t screen;
@@ -393,7 +395,7 @@ void menu(screen_t screen, colors_t colors, int* levelNumber)
 	SDL_Event event = { 0 };
 
 
-	while(!levelEntered)
+	while (!levelEntered)
 	{
 		drawMenu(screen, colors, menu);
 
@@ -467,33 +469,33 @@ void menuKeyDown(SDL_Event event, int* levelEntered, int* option, menu_t* menu)
 
 	switch (event.key.keysym.sym)
 	{
-		case SDLK_ESCAPE:
-			exit(EXIT_SUCCESS);
-			break;
+	case SDLK_ESCAPE:
+		exit(EXIT_SUCCESS);
+		break;
 
-		case SDLK_UP:
-			menu->active[active] = 0;
+	case SDLK_UP:
+		menu->active[active] = 0;
 
-			if (active == 0)
-				active = menuOptions;
+		if (active == 0)
+			active = menuOptions;
 
-			menu->active[active - 1] = 1;
-			break;
+		menu->active[active - 1] = 1;
+		break;
 
-		case SDLK_DOWN:
-			menu->active[active] = 0;
+	case SDLK_DOWN:
+		menu->active[active] = 0;
 
-			if (active == menuOptions - 1)
-				active = -1;
+		if (active == menuOptions - 1)
+			active = -1;
 
-			menu->active[active + 1] = 1;
-			break;
+		menu->active[active + 1] = 1;
+		break;
 
-		case SDLK_RETURN:
-			active = findActive(*menu);
-			*option = active;
-			*levelEntered = 1;
-			break;
+	case SDLK_RETURN:
+		active = findActive(*menu);
+		*option = active;
+		*levelEntered = 1;
+		break;
 	}
 }
 
@@ -521,7 +523,7 @@ void optionView(int option, screen_t screen, SDL_Event event)
 		enterPseudonym(screen, event);
 	}
 
-		//
+	//
 }
 
 
@@ -539,7 +541,7 @@ void enterPseudonym(screen_t screen, SDL_Event event)
 				handleInput(event, &pseudonymEntered, screen);
 			}
 
-		updateScreen(screen);
+			updateScreen(screen);
 		}
 	}
 }
@@ -607,7 +609,7 @@ void drawMenuString(screen_t screen, colors_t colors, const char* text, int y, m
 {
 	drawString(screen, SCREEN_WIDTH / 2 - 4 * int(menuTextScale) * strlen(text), y, text, menuTextScale);
 
-	if(index != titleFlag && menu.active[index] == 1)
+	if (index != titleFlag && menu.active[index] == 1)
 		drawRectangle(screen, SCREEN_WIDTH / 2 - 4 * int(menuTextScale) * strlen(text), y + 8 * int(menuTextScale), strlen(text) * 8 * int(menuTextScale), 3, colors.yellowOrange, colors.yellowOrange);
 }
 
@@ -633,8 +635,8 @@ void initPlatform(platform_t** platform, screen_t screen, level_t level)
 	for (int i = 0; i < level.platformCount; i++)
 	{
 		initPlatformSprite(&(*platform)[i], screen, level);
-		initPlatformSpawn(&(*platform)[i], level, i);          
-		initPlatformHitbox(&(*platform)[i]); 
+		initPlatformSpawn(&(*platform)[i], level, i);
+		initPlatformHitbox(&(*platform)[i]);
 	}
 }
 
@@ -659,7 +661,7 @@ void initPlatformSpawn(platform_t* platform, level_t level, int index)
 
 void initPlatformHitbox(platform_t* platform)
 {
-	
+
 	platform->hitbox.top = platform->platformY - (platform->platformHeight / 2);
 	platform->hitbox.bottom = platform->platformY + (platform->platformHeight / 2);
 	platform->hitbox.left = platform->platformX - (platform->platformWidth / 2);
@@ -791,7 +793,7 @@ void initLevel(level_t* level, int levelNum)
 char* handleFilePath(int levelNum)
 {
 	char base[15] = "./levels/level";
-	char levelNumTxt[2]; 
+	char levelNumTxt[2];
 
 	snprintf(levelNumTxt, sizeof(levelNumTxt), "%d", levelNum);
 
@@ -851,7 +853,7 @@ void writeLevelInfo(char** levelTxt, const char* filePath, level_t* level)
 
 	for (int i = 0; i < levelHeight; i++)
 	{
-		for (int j = 0; j < levelWidth; j++) 
+		for (int j = 0; j < levelWidth; j++)
 		{
 			char fileChar;
 
@@ -942,29 +944,29 @@ void interpretItemsPosition(level_t* level, char** levelTxt)
 
 			switch (levelTxt[i][j])
 			{
-				case 'X':
-					level->platformsY[platformCounter] = (i + yPlatformOffset) * yModifier;
-					level->platformsX[platformCounter] = (j + 1) * xModifier;
+			case 'X':
+				level->platformsY[platformCounter] = (i + yPlatformOffset) * yModifier;
+				level->platformsX[platformCounter] = (j + 1) * xModifier;
 
-					platformCounter++;
-					break;
+				platformCounter++;
+				break;
 
-				case 'O':
-					level->playerSpawn[0] = (i + yPlayerOffset)* yModifier;
-					level->playerSpawn[1] = (j + 1) * xModifier;
-					break;
+			case 'O':
+				level->playerSpawn[0] = (i + yPlayerOffset) * yModifier;
+				level->playerSpawn[1] = (j + 1) * xModifier;
+				break;
 
-				case 'K':
-					level->kongSpawn[0] = (i + yKongOffset) * yModifier;
-					level->kongSpawn[1] = (j + 1) * xModifier;
-					break;
+			case 'K':
+				level->kongSpawn[0] = (i + yKongOffset) * yModifier;
+				level->kongSpawn[1] = (j + 1) * xModifier;
+				break;
 
-				case 'H':
-					level->laddersY[ladderCounter] = (i + yLadderOffset) * yModifier;
-					level->laddersX[ladderCounter] = (j + 1) * xModifier;
+			case 'H':
+				level->laddersY[ladderCounter] = (i + yLadderOffset) * yModifier;
+				level->laddersX[ladderCounter] = (j + 1) * xModifier;
 
-					ladderCounter++;
-					break;
+				ladderCounter++;
+				break;
 			}
 		}
 	}
@@ -1182,7 +1184,7 @@ void drawSurface(screen_t screen, SDL_Surface* sprite, int x, int y)
 }
 
 
-void drawPixel(SDL_Surface* surface, int x, int y, Uint32 color) 
+void drawPixel(SDL_Surface* surface, int x, int y, Uint32 color)
 {
 	int bpp = surface->format->BytesPerPixel;
 	Uint8* p = (Uint8*)surface->pixels + y * surface->pitch + x * bpp;
@@ -1190,7 +1192,7 @@ void drawPixel(SDL_Surface* surface, int x, int y, Uint32 color)
 }
 
 
-void drawRectangle(screen_t screen, int x, int y, int width, int height, Uint32 outlineColor, Uint32 fillColor) 
+void drawRectangle(screen_t screen, int x, int y, int width, int height, Uint32 outlineColor, Uint32 fillColor)
 {
 	drawLine(screen, x, y, height, 0, 1, outlineColor);
 	drawLine(screen, x + width - 1, y, height, 0, 1, outlineColor);
@@ -1204,7 +1206,7 @@ void drawRectangle(screen_t screen, int x, int y, int width, int height, Uint32 
 
 void drawLine(screen_t screen, int x, int y, int l, int dx, int dy, Uint32 color)
 {
-	for (int i = 0; i < l; i++) 
+	for (int i = 0; i < l; i++)
 	{
 		drawPixel(screen.screen, x, y, color);
 		x += dx;
@@ -1217,8 +1219,8 @@ void drawGameMenu(screen_t screen, colors_t colors, const char* menuText, double
 {
 	char text[128];
 
-	drawRectangle(screen, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT/10, colors.red, colors.black);
-	drawString(screen, SCREEN_WIDTH/2 - 4 * strlen(menuText), SCREEN_HEIGHT/10/2, menuText, 1);
+	drawRectangle(screen, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 10, colors.red, colors.black);
+	drawString(screen, SCREEN_WIDTH / 2 - 4 * strlen(menuText), SCREEN_HEIGHT / 10 / 2, menuText, 1);
 
 	sprintf(text, "%.1lf", worldTime);
 	drawString(screen, SCREEN_WIDTH / 2 - 4 * strlen(text), SCREEN_HEIGHT / 15 / 2, text, 1);
@@ -1266,7 +1268,7 @@ void handleX(player_t player, double* distanceX, double delta)
 	*distanceX = player.horizontalVelocity * delta;
 
 	if (*distanceX > 0)
-		*distanceX += 0.8;
+		*distanceX += 1.0;
 }
 
 
@@ -1319,7 +1321,7 @@ void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event e
 			worldTime -= delta;
 
 		handleBarrelThrow(kong, barrel);
-		physics(player, platform, ladder, barrel, level, delta);
+		physics(player, platform, ladder, barrel, level, delta, &quit);
 
 		handleXY(*player, &distanceX, &distanceY, delta);
 		updateBarrelsPosition(barrel, delta);
@@ -1327,7 +1329,7 @@ void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event e
 		draw(screen, colors, *player, platform, ladder, level, *kong, *barrel, worldTime);
 
 		eventHandler(&quit, player, platform, ladder, event, level);
-		
+
 		updatePlayerPosition(player, distanceX, distanceY);
 
 		frames++;
@@ -1337,16 +1339,16 @@ void gameLoop(int t1, screen_t screen, player_t* player, char* text, SDL_Event e
 
 void handleBarrelThrow(kong_t* kong, barrel_t** barrel)
 {
-	if (kong->timer >= 2.0)
+	if (kong->timer >= 1.0)
 	{
 		kong->timer = 0;
 		int index = calculateBarrelKongDistance(*barrel, *kong);
 		int x = barrelKongX((*barrel)[index], *kong);
 		int y = barrelKongY((*barrel)[index], *kong) + kong->kongHeight / 3 - (*barrel)[index].barrelHeight / 2;
 
-		updateBarrelPosition(&(*barrel)[index],x, y);
+		updateBarrelPosition(&(*barrel)[index], x, y);
 
-		(& (*barrel)[index])->horizontalVelocity = barrelSpeed;
+		(&(*barrel)[index])->horizontalVelocity = barrelSpeed;
 		(&(*barrel)[index])->verticalVelocity = 0;
 		(&(*barrel)[index])->throwFlag = 1;
 	}
@@ -1416,18 +1418,18 @@ void eventHandler(int* quit, player_t* player, platform_t* platform, ladder_t* l
 	{
 		switch (event.type)
 		{
-			case SDL_KEYDOWN:
-				handleKeyDown(event, quit, player, platform, ladder, level);
-				break;
+		case SDL_KEYDOWN:
+			handleKeyDown(event, quit, player, platform, ladder, level);
+			break;
 
-			case SDL_KEYUP:
-				player->horizontalVelocity = 0;
-				player->verticalVelocity = 0;
-				break;
+		case SDL_KEYUP:
+			player->horizontalVelocity = 0;
+			player->verticalVelocity = 0;
+			break;
 
-			case SDL_QUIT:
-				*quit = 1;
-				break;
+		case SDL_QUIT:
+			*quit = 1;
+			break;
 		}
 	}
 }
@@ -1437,29 +1439,29 @@ void handleKeyDown(SDL_Event event, int* quit, player_t* player, platform_t* pla
 {
 	switch (event.key.keysym.sym)
 	{
-		case SDLK_ESCAPE:
-			*quit = 1;
-			break;
+	case SDLK_ESCAPE:
+		*quit = 1;
+		break;
 
-		case SDLK_LEFT:
-			handleMovement(player, 'L', platform, level);
-			break;
+	case SDLK_LEFT:
+		handleMovement(player, 'L', platform, level);
+		break;
 
-		case SDLK_RIGHT:
-			handleMovement(player, 'R', platform, level);
-			break;
+	case SDLK_RIGHT:
+		handleMovement(player, 'R', platform, level);
+		break;
 
-		case SDLK_SPACE:
-			handleJump(player, platform, level);
-			break;
+	case SDLK_SPACE:
+		handleJump(player, platform, level);
+		break;
 
-		case SDLK_UP:
-			handleLadder(player, ladder, level, '+');
-			break;
+	case SDLK_UP:
+		handleLadder(player, ladder, level, '+');
+		break;
 
-		case SDLK_DOWN:
-			handleLadder(player, ladder, level, '-');
-			break;
+	case SDLK_DOWN:
+		handleLadder(player, ladder, level, '-');
+		break;
 	}
 }
 
@@ -1482,14 +1484,14 @@ void handleMovement(player_t* player, char side, platform_t* platform, level_t l
 {
 	switch (side)
 	{
-		case 'R':
-			player->horizontalVelocity = 0.5;
-			break;
+	case 'R':
+		player->horizontalVelocity = 0.5;
+		break;
 
-		case 'L':
-			player->horizontalVelocity = -0.5;
-			break;
-	}		
+	case 'L':
+		player->horizontalVelocity = -0.5;
+		break;
+	}
 }
 
 
@@ -1499,15 +1501,15 @@ void handleLadder(player_t* player, ladder_t* ladder, level_t level, char sign)
 
 	switch (sign)
 	{
-		case '+':
-			modifier = -1.0;
-			break;
-		case '-':
-			modifier = 1.0;
-			break;
-		default:
-			perror("Error - unknown ladder modifier sign");
-			exit(EXIT_FAILURE);
+	case '+':
+		modifier = -1.0;
+		break;
+	case '-':
+		modifier = 1.0;
+		break;
+	default:
+		perror("Error - unknown ladder modifier sign");
+		exit(EXIT_FAILURE);
 	}
 
 	if (player->ladderFlag == 0 && canEnterLadder(*player, ladder, level, modifier) == 0)
@@ -1524,13 +1526,13 @@ int canEnterLadder(player_t player, ladder_t* ladder, level_t level, double modi
 {
 	for (int i = 0; i < level.ladderCount; i++)
 	{
-		if ((player.verticalVelocity == 0 || player.ladderFlag == 1)&&
+		if ((player.verticalVelocity == 0 || player.ladderFlag == 1) &&
 			checkInRange(player.playerX, ladder[i].hitbox.left, ladder[i].hitbox.right) == 0 &&
 			checkLadderPlayerY(player, ladder[i]) == 0)
 		{
 			if (modifier < 0)
 			{
-				if(ladder[i].hitbox.top < player.hitbox.top)
+				if (ladder[i].hitbox.top < player.hitbox.top)
 					return 0;
 			}
 
@@ -1595,10 +1597,21 @@ int checkInRange(int x, int smaller, int greater) //0 jesli tak 1 jesli nie
 }
 
 
-void physics(player_t* player, platform_t* platform, ladder_t* ladder, barrel_t** barrel, level_t level, double delta)
+void physics(player_t* player, platform_t* platform, ladder_t* ladder, barrel_t** barrel, level_t level, double delta, int* quit)
 {
 	playerPhysics(player, platform, ladder, level, delta);
 	barrelPhysics(barrel, platform, ladder, level, delta);
+
+	for (int i = 0; i < barrelCount; i++)
+	{
+		if (detectPlayerBarrelCollision((*barrel)[i], *player, delta) == 1)
+		{
+			while (1)
+			{
+				
+			}
+		}
+	}
 }
 
 
@@ -1725,10 +1738,10 @@ int detectColissionX(player_t* player, platform_t* platform, level_t level, doub
 
 	for (int i = 0; i < level.platformCount; i++)
 	{
-		int T = platform[i].hitbox.top, B = platform[i].hitbox.bottom,  L = platform[i].hitbox.left, R = platform[i].hitbox.right;
+		int T = platform[i].hitbox.top, B = platform[i].hitbox.bottom, L = platform[i].hitbox.left, R = platform[i].hitbox.right;
 
-		if(checkInRange(player->playerY, T, B) == 0 || checkInRange(player->hitbox.top, T, B) == 0)
-		{ 
+		if (checkInRange(player->playerY, T, B) == 0 || checkInRange(player->hitbox.top, T, B) == 0)
+		{
 			if (checkInRange(playerPos + modifier * player->horizontalVelocity * delta, L, R) == 0)
 				return 1;
 		}
@@ -1815,4 +1828,19 @@ void gravityBarrel(barrel_t* barrel, platform_t* platform, level_t level, double
 			barrel->ladderFlag = 0;
 		}
 	}
+}
+
+
+int detectPlayerBarrelCollision(barrel_t barrel, player_t player, double delta)
+{
+	if (checkInRange(barrel.barrelY, player.hitbox.top, player.hitbox.bottom) == 0 ||
+		checkInRange(barrel.hitbox.top, player.hitbox.top, player.hitbox.bottom) == 0 ||
+		checkInRange(barrel.hitbox.bottom, player.hitbox.top, player.hitbox.bottom) == 0)
+	{
+		if (checkInRange(barrel.hitbox.left + barrel.horizontalVelocity * delta, player.hitbox.left, player.hitbox.right) == 0 ||
+			checkInRange(barrel.hitbox.right + barrel.horizontalVelocity * delta, player.hitbox.left, player.hitbox.right) == 0)
+			return 1;
+	}
+
+	return 0;
 }
