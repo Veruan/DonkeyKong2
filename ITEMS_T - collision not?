@@ -76,6 +76,8 @@ typedef struct player_t
 	double horizontalVelocity;
 	hitbox_t hitbox;
 	int ladderFlag;
+	int jumpFlag;
+	double animationTimer;
 };
 
 
@@ -87,6 +89,8 @@ typedef struct kong_t
 	int kongX;
 	int kongY;
 	double timer;
+	int throwFlag;
+	double animationTimer;
 };
 
 
@@ -102,6 +106,7 @@ typedef struct barrel_t
 	hitbox_t hitbox;
 	int ladderFlag;
 	int throwFlag;
+	double animationTimer;
 };
 
 
@@ -167,6 +172,7 @@ typedef struct sprites_t
 
 	SDL_Surface* kongStand;
 	SDL_Surface* kongThrow;
+	SDL_Surface* kongBarrel;
 
 	SDL_Surface* barrel1;
 	SDL_Surface* barrel2;
@@ -232,8 +238,8 @@ ladder_t* allocateLadders(level_t level);
 #pragma endregion
 
 #pragma region player
-void initPlayer(player_t* player, screen_t screen, level_t level);
-void initPlayerSprite(player_t* player, screen_t screen);
+void initPlayer(items_t* items, screen_t screen, level_t level);
+void initPlayerSprite(items_t* items, screen_t screen);
 void initPlayerSpawn(player_t* player, level_t level);
 void initPlayerVelocity(player_t* player);
 void initPlayerHitbox(player_t* player);
@@ -243,18 +249,18 @@ void updatePlayerHitbox(player_t* player, double valueX, double valueY);
 #pragma endregion
 
 #pragma region enemies
-void initKong(kong_t* kong, screen_t screen, level_t level);
-void initKongSprite(kong_t* kong, screen_t screen);
+void initKong(items_t* items, screen_t screen, level_t level);
+void initKongSprite(items_t* items, screen_t screen);
 void initKongSpawn(kong_t* kong, level_t level);
 
 barrel_t* allocateBarrels();
-void initBarrels(barrel_t** barrel, screen_t screen);
-void initBarrelSprite(barrel_t* barrel, screen_t screen);
+void initBarrels(items_t* items, screen_t screen);
+void initBarrelSprite(barrel_t* barrel, items_t* items, screen_t screen);
 void initBarrelSpawn(barrel_t* barrel);
 void initBarrelHitbox(barrel_t* barrel);
 void initBarrelVelocity(barrel_t* barrel);
 
-void handleBarrelThrow(kong_t* kong, barrel_t** barrel);
+void handleBarrelThrow(items_t* items);
 void updateBarrelPosition(barrel_t* barrel, double valueX, double valueY);
 void updateBarrelHitbox(barrel_t* barrel, double valueX, double valueY);
 int calculateBarrelKongDistance(barrel_t* barrel, kong_t kong);
@@ -286,8 +292,8 @@ void drawPixel(SDL_Surface* surface, int x, int y, Uint32 color);
 void drawLine(screen_t screen, int x, int y, int l, int dx, int dy, Uint32 color);
 void drawRectangle(screen_t screen, int x, int y, int width, int height, Uint32 outlineColor, Uint32 fillColor);
 void drawGameMenu(screen_t screen, colors_t colors, const char* menuText, double worldTime);
-void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel, double worldTime);
-void draw(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel, double worldTime);
+void drawScene(screen_t screen, colors_t colors, items_t items, level_t level, double worldTime);
+void draw(screen_t screen, colors_t colors, items_t items, level_t level, double worldTime);
 // rysowanie linii o d³ugoœci l w pionie (gdy dx = 0, dy = 1) 
 // b¹dŸ poziomie (gdy dx = 1, dy = 0)
 // draw a vertical (when dx = 0, dy = 1) or horizontal (when dx = 1, dy = 0) line
@@ -332,6 +338,18 @@ void handleJump(player_t* player, platform_t* platform, level_t level);
 void handleMovement(player_t* player, char side, platform_t* platform, level_t level);
 void handleLadder(player_t* player, ladder_t* ladder, level_t level, char sign);
 void enterLadder(player_t* player, double modifier);
+#pragma endregion
+
+#pragma region animation
+void updateSprites(items_t* items, double delta);
+
+void updatePlayerSprite(items_t* items);
+void handleRightMovSprite(items_t* items);
+void handleLeftMovSprite(items_t* items);
+void handleJumpSprite(items_t* items);
+void handleLadderSprite(items_t* items);
+
+void updateKongSprite(items_t* items);
 #pragma endregion
 
 #pragma region free
@@ -421,12 +439,12 @@ void menu(screen_t screen, colors_t colors, int* levelNumber)
 void initDynamic(screen_t screen, items_t* items, level_t* level, int levelNum)
 {
 	initLevel(level, levelNum);
-	//initSprites(screen, &items->sprites);
+	initSprites(screen, &items->sprites);
 	initPlatform(&items->platform, screen, *level);
-	initPlayer(&items->player, screen, *level);
 	initLadder(&items->ladder, screen, *level);
-	initKong(&items->kong, screen, *level);
-	initBarrels(&items->barrel, screen);
+	initPlayer(items, screen, *level);
+	initKong(items, screen, *level);
+	initBarrels(items, screen);
 }
 
 
@@ -635,8 +653,12 @@ void initSprites(screen_t screen, sprites_t* sprites)
 	sprites->PjumpLeft = initBMP(&screen, "./DonkeyKongTextures2/playerJL.bmp");
 	sprites->PjumpRight = initBMP(&screen, "./DonkeyKongTextures2/playerJR.bmp");
 
+	sprites->Pladder1 = initBMP(&screen, "./DonkeyKongTextures2/playerLadder1.bmp");
+	sprites->Pladder2 = initBMP(&screen, "./DonkeyKongTextures2/playerLadder2.bmp");
+
 	sprites->kongStand = initBMP(&screen, "./DonkeyKongTextures2/kong.bmp");
 	sprites->kongThrow = initBMP(&screen, "./DonkeyKongTextures2/kongThrow.bmp");
+	sprites->kongBarrel = initBMP(&screen, "./DonkeyKongTextures2/kongBarrel.bmp");
 
 	sprites->barrel1 = initBMP(&screen, "./DonkeyKongTextures2/barrel1.bmp");
 	sprites->barrel2 = initBMP(&screen, "./DonkeyKongTextures2/barrel2.bmp");
@@ -755,21 +777,23 @@ void initLadderHitbox(ladder_t* ladder)
 }
 
 
-void initPlayer(player_t* player, screen_t screen, level_t level)
+void initPlayer(items_t* items, screen_t screen, level_t level)
 {
-	initPlayerSprite(player, screen);
-	initPlayerSpawn(player, level);
-	initPlayerHitbox(player);
-	initPlayerVelocity(player);
-	player->ladderFlag = 0;
+	initPlayerSprite(items, screen);
+	initPlayerSpawn(&items->player, level);
+	initPlayerHitbox(&items->player);
+	initPlayerVelocity(&items->player);
+	(&items->player)->ladderFlag = 0;
+	(&items->player)->jumpFlag = 0;
+	(&items->player)->animationTimer = 0;
 }
 
 
-void initPlayerSprite(player_t* player, screen_t screen)
+void initPlayerSprite(items_t* items, screen_t screen)
 {
-	player->sprite = initBMP(&screen, "./DonkeyKongTextures2/mario2.bmp");
-	player->playerHeight = player->sprite->h;
-	player->playerWidth = player->sprite->w;
+	(&items->player)->sprite = items->sprites.Pleft1;
+	(&items->player)->playerHeight = (&items->player)->sprite->h;
+	(&items->player)->playerWidth = (&items->player)->sprite->w;
 }
 
 
@@ -1031,20 +1055,23 @@ void initWindowAndRenderer(screen_t* screen)
 }
 
 
-void initKong(kong_t* kong, screen_t screen, level_t level)
+void initKong(items_t* items, screen_t screen, level_t level)
 {
-	initKongSprite(kong, screen);
-	initKongSpawn(kong, level);
-	kong->timer = 0;
+	initKongSprite(items, screen);
+	initKongSpawn(&items->kong, level);
+
+	(&items->kong)->timer = 0;
+	(&items->kong)->throwFlag = 0;
+	(&items->kong)->animationTimer = 0;
 }
 
 
-void initKongSprite(kong_t* kong, screen_t screen)
+void initKongSprite(items_t* items, screen_t screen)
 {
-	kong->sprite = initBMP(&screen, "./DonkeyKongTextures2/kong.bmp");
+	(&items->kong)->sprite = items->sprites.kongStand;
 
-	kong->kongWidth = kong->sprite->w;
-	kong->kongHeight = kong->sprite->h;
+	(&items->kong)->kongWidth = (&items->kong)->sprite->w;
+	(&items->kong)->kongHeight = (&items->kong)->sprite->h;
 }
 
 
@@ -1055,17 +1082,19 @@ void initKongSpawn(kong_t* kong, level_t level)
 }
 
 
-void initBarrels(barrel_t** barrel, screen_t screen)
+void initBarrels(items_t* items, screen_t screen)
 {
-	*barrel = allocateBarrels();
+	items->barrel = allocateBarrels();
+
 	for (int i = 0; i < barrelCount; i++)
 	{
-		initBarrelSprite(&(*barrel)[i], screen);
-		initBarrelSpawn(&(*barrel)[i]);
-		initBarrelHitbox(&(*barrel)[i]);
-		initBarrelVelocity(&(*barrel)[i]);
-		(&(*barrel)[i])->ladderFlag = 0;
-		(&(*barrel)[i])->throwFlag = 0;
+		initBarrelSprite(&(*(&items->barrel))[i], items, screen);
+		initBarrelSpawn(&(*(&items->barrel))[i]);
+		initBarrelHitbox(&(*(&items->barrel))[i]);
+		initBarrelVelocity(&(*(&items->barrel))[i]);
+		(&(*(&items->barrel))[i])->ladderFlag = 0;
+		(&(*(&items->barrel))[i])->throwFlag = 0;
+		(&(*(&items->barrel))[i])->animationTimer = 0;
 	}
 }
 
@@ -1083,9 +1112,10 @@ barrel_t* allocateBarrels()
 }
 
 
-void initBarrelSprite(barrel_t* barrel, screen_t screen)
+void initBarrelSprite(barrel_t* barrel, items_t* items, screen_t screen)
 {
-	barrel->sprite = initBMP(&screen, "./DonkeyKongTextures2/Barrel.bmp");
+	barrel->sprite = items->sprites.barrel1;
+
 	barrel->barrelWidth = barrel->sprite->w;
 	barrel->barrelHeight = barrel->sprite->h;
 }
@@ -1256,22 +1286,22 @@ void drawGameMenu(screen_t screen, colors_t colors, const char* menuText, double
 }
 
 
-void drawScene(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel, double worldTime)
+void drawScene(screen_t screen, colors_t colors, items_t items, level_t level, double worldTime)
 {
 	SDL_FillRect(screen.screen, NULL, colors.black);
 
 	for (int i = 0; i < level.platformCount; i++)
-		drawSurface(screen, platform[i].sprite, platform[i].platformX, platform[i].platformY);
+		drawSurface(screen, items.platform[i].sprite, items.platform[i].platformX, items.platform[i].platformY);
 
 	for (int i = 0; i < level.ladderCount; i++)
-		drawSurface(screen, ladder[i].sprite, ladder[i].ladderX, ladder[i].ladderY);
+		drawSurface(screen, items.ladder[i].sprite, items.ladder[i].ladderX, items.ladder[i].ladderY);
 
-	drawSurface(screen, player.sprite, player.playerX, player.playerY);
-
-	drawSurface(screen, kong.sprite, kong.kongX, kong.kongY);
+	drawSurface(screen, items.player.sprite, items.player.playerX, items.player.playerY);
 
 	for (int i = 0; i < barrelCount; i++)
-		drawSurface(screen, barrel[i].sprite, barrel[i].barrelX, barrel[i].barrelY);
+		drawSurface(screen, items.barrel[i].sprite, items.barrel[i].barrelX, items.barrel[i].barrelY);
+
+	drawSurface(screen, items.kong.sprite, items.kong.kongX, items.kong.kongY);
 
 	drawGameMenu(screen, colors, menuText, worldTime);
 }
@@ -1285,9 +1315,9 @@ void updateScreen(screen_t screen)
 }
 
 
-void draw(screen_t screen, colors_t colors, player_t player, platform_t* platform, ladder_t* ladder, level_t level, kong_t kong, barrel_t* barrel, double worldTime)
+void draw(screen_t screen, colors_t colors, items_t items, level_t level, double worldTime)
 {
-	drawScene(screen, colors, player, platform, ladder, level, kong, barrel, worldTime);
+	drawScene(screen, colors, items, level, worldTime);
 	updateScreen(screen);
 }
 
@@ -1349,37 +1379,175 @@ void gameLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t col
 		else
 			worldTime -= delta;
 
-		handleBarrelThrow((&items.kong), (&items.barrel));
+		handleBarrelThrow(&items);
 		physics((&items.player), items.platform, items.ladder, (&items.barrel), level, delta, &quit);
 
 		handleXY(items.player, &distanceX, &distanceY, delta);
 		updateBarrelsPosition((&items.barrel), delta);
 
-		draw(screen, colors, items.player, items.platform, items.ladder, level, items.kong, items.barrel, worldTime);
+		draw(screen, colors, items, level, worldTime);
 
 		eventHandler(&quit, (&items.player), items.platform, items.ladder, event, level);
 
 		updatePlayerPosition((&items.player), distanceX, distanceY);
+		updateSprites(&items, delta);
 
 		frames++;
 	}
 }
 
 
-void handleBarrelThrow(kong_t* kong, barrel_t** barrel)
+void updateSprites(items_t* items, double delta)
 {
-	if (kong->timer >= 1.0)
+	(&items->player)->animationTimer += delta;
+	(&items->kong)->animationTimer += delta;
+
+	updatePlayerSprite(items);
+	updateKongSprite(items);
+
+	for (int i = 0; i < barrelCount; i++)
 	{
-		kong->timer = 0;
-		int index = calculateBarrelKongDistance(*barrel, *kong);
-		int x = barrelKongX((*barrel)[index], *kong);
-		int y = barrelKongY((*barrel)[index], *kong) + kong->kongHeight / 3 - (*barrel)[index].barrelHeight / 2;
+		if ((&(*(&items->barrel))[i])->throwFlag == 1)
+		{
+			(&(*(&items->barrel))[i])->animationTimer += delta;
 
-		updateBarrelPosition(&(*barrel)[index], x, y);
+			if ((&(*(&items->barrel))[i])->animationTimer >= 0.2)
+			{
+				(&(*(&items->barrel))[i])->sprite = items->sprites.barrel2;
 
-		(&(*barrel)[index])->horizontalVelocity = barrelSpeed;
-		(&(*barrel)[index])->verticalVelocity = 0;
-		(&(*barrel)[index])->throwFlag = 1;
+				if ((&(*(&items->barrel))[i])->animationTimer >= 0.4)
+					(&(*(&items->barrel))[i])->animationTimer = 0;
+			}
+
+			else
+				(&(*(&items->barrel))[i])->sprite = items->sprites.barrel1;
+		}
+	}
+}
+
+
+void updatePlayerSprite(items_t* items)
+{
+	if ((&items->player)->jumpFlag == 1)
+	{
+		handleJumpSprite(items);
+	}
+
+	else if ((&items->player)->ladderFlag == 1)
+	{
+		handleLadderSprite(items);
+		
+	}
+
+	else if ((&items->player)->horizontalVelocity > 0)
+	{
+		handleRightMovSprite(items);
+	}
+
+	else if ((&items->player)->horizontalVelocity < 0)
+	{
+		handleLeftMovSprite(items);
+	}
+
+	else
+		(&items->player)->animationTimer = 0;
+}
+
+
+void handleLadderSprite(items_t* items)
+{
+	if ((&items->player)->animationTimer >= 0.2)
+	{
+		(&items->player)->sprite = items->sprites.Pladder2;
+
+		if ((&items->player)->animationTimer >= 0.4)
+			(&items->player)->animationTimer = 0;
+	}
+
+	else
+		(&items->player)->sprite = items->sprites.Pladder1;
+}
+
+
+void handleRightMovSprite(items_t* items)
+{
+	if ((&items->player)->animationTimer >= 0.2)
+	{
+		(&items->player)->sprite = items->sprites.Pright2;
+
+		if ((&items->player)->animationTimer >= 0.4)
+			(&items->player)->animationTimer = 0;
+	}
+
+	else
+		(&items->player)->sprite = items->sprites.Pright1;
+}
+
+
+void handleLeftMovSprite(items_t* items)
+{
+	if ((&items->player)->animationTimer >= 0.2)
+	{
+		(&items->player)->sprite = items->sprites.Pleft2;
+
+		if ((&items->player)->animationTimer >= 0.4)
+			(&items->player)->animationTimer = 0;
+	}
+
+	else
+		(&items->player)->sprite = items->sprites.Pleft1;
+}
+
+
+void handleJumpSprite(items_t* items)
+{
+	if ((&items->player)->horizontalVelocity >= 0)
+		(&items->player)->sprite = items->sprites.PjumpRight;
+
+	else
+		(&items->player)->sprite = items->sprites.PjumpLeft;
+
+	(&items->player)->animationTimer = 0;
+}
+
+
+void updateKongSprite(items_t* items)
+{
+	if ((&items->kong)->throwFlag == 1)
+	{
+		(&items->kong)->sprite = items->sprites.kongBarrel;
+
+		if ((&items->kong)->animationTimer >= 0.1)
+			(&items->kong)->sprite = items->sprites.kongThrow;
+
+		if ((&items->kong)->animationTimer >= 1.0)
+			(&items->kong)->throwFlag = 0;
+	}
+
+	else
+	{
+		(&items->kong)->sprite = items->sprites.kongStand;
+		(&items->kong)->animationTimer = 0;
+	}
+}
+
+
+void handleBarrelThrow(items_t* items)
+{
+	if ((& items->kong)->timer >= 2.0)
+	{
+		(&items->kong)->timer = 0;
+		(&items->kong)->throwFlag = 1;
+		
+		int index = calculateBarrelKongDistance(items->barrel, items->kong);
+		int x = barrelKongX((items->barrel)[index], items->kong);
+		int y = barrelKongY((items->barrel)[index], items->kong) + items->kong.kongHeight / 3 - (items->barrel)[index].barrelHeight / 2;
+
+		updateBarrelPosition(&(*(&items->barrel))[index], x, y);
+
+		(&(*(&items->barrel))[index])->horizontalVelocity = barrelSpeed;
+		(&(*(&items->barrel))[index])->verticalVelocity = 0;
+		(&(*(&items->barrel))[index])->throwFlag = 1;
 	}
 }
 
@@ -1501,6 +1669,7 @@ void handleJump(player_t* player, platform_t* platform, level_t level)
 	{
 		if (platform[i].hitbox.top == player->hitbox.bottom && player->verticalVelocity == 0)
 		{
+			player->jumpFlag = 1;
 			player->verticalVelocity = jumpStrength;
 			player->playerY -= 1;
 			updatePlayerHitbox(player, 0, -1);
@@ -1639,8 +1808,8 @@ void physics(player_t* player, platform_t* platform, ladder_t* ladder, barrel_t*
 
 			while (1)
 			{
-				if (t >= 10000)
-					break;
+				//if (t >= 10000)
+					//break;
 			}
 		}
 	}
@@ -1697,6 +1866,7 @@ void gravity(player_t* player, platform_t* platform, level_t level)
 	{
 		player->verticalVelocity = 0;
 		player->ladderFlag = 0;
+		player->jumpFlag = 0;
 	}
 }
 
