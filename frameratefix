@@ -39,6 +39,9 @@ const double playerGravity = 1.0;
 
 const int barrelCount = 5;
 const double barrelSpeed = 300.0;
+const double barrelGravity = 1.0;
+
+const double throwTimer = 1.2;
 
 
 typedef struct menu_t
@@ -1117,7 +1120,7 @@ void updatePlayerPosition(player_t* player, double valueX, double valueY)
 
 void initWindowAndRenderer(screen_t* screen)
 {
-	if (SDL_CreateWindowAndRenderer(SCREEN_WIDTH, SCREEN_HEIGHT, /*SDL_WINDOW_FULLSCREEN_DESKTOP */ 0, &screen->window, &screen->renderer) != 0)
+	if (SDL_CreateWindowAndRenderer(SCREEN_WIDTH, SCREEN_HEIGHT, /*SDL_WINDOW_FULLSCREEN_DESKTOP*/ 0, &screen->window, &screen->renderer) != 0)
 	{
 		SDL_Quit();
 		printf("SDL_CreateWindowAndRenderer error: %s\n", SDL_GetError());
@@ -1129,7 +1132,7 @@ void initWindowAndRenderer(screen_t* screen)
 
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 	SDL_SetWindowTitle(screen->window, "Donkey Kong - 198290");
-	//SDL_ShowCursor(SDL_DISABLE);
+	SDL_ShowCursor(SDL_DISABLE);
 
 	screen->screen = SDL_CreateRGBSurface(0, SCREEN_WIDTH, SCREEN_HEIGHT, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 	screen->scrtex = SDL_CreateTexture(screen->renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -1633,7 +1636,7 @@ void updateKongSprite(items_t* items)
 		if ((&items->kong)->animationTimer >= 0.1)
 			(&items->kong)->sprite = items->sprites.kongThrow;
 
-		if ((&items->kong)->animationTimer >= 1.0)
+		if ((&items->kong)->animationTimer >= 0.8)
 			(&items->kong)->throwFlag = 0;
 	}
 
@@ -1647,7 +1650,7 @@ void updateKongSprite(items_t* items)
 
 void handleBarrelThrow(items_t* items)
 {
-	if ((& items->kong)->timer >= 2.0)
+	if ((& items->kong)->timer >= throwTimer)
 	{
 		(&items->kong)->timer = 0;
 		(&items->kong)->throwFlag = 1;
@@ -2138,7 +2141,15 @@ int detectColissionX(player_t* player, platform_t* platform, level_t level, doub
 		if (checkInRange(player->playerY, T, B) == 0 || checkInRange(player->hitbox.top, T, B) == 0)
 		{
 			if (checkInRange(playerPos + modifier * player->horizontalVelocity * delta, L, R) == 0)
-				return 1;
+			{
+				if (player->hitbox.bottom - T <= platform[i].platformHeight / 2)
+				{
+					updatePlayerPosition(player, modifier * 3.0, player->hitbox.top - T);
+				}
+
+				else
+					return 1;
+			}
 		}
 	}
 
@@ -2214,7 +2225,7 @@ void gravityBarrel(barrel_t* barrel, platform_t* platform, level_t level, double
 		int y, colissionFlag = detectBottomBarrelColissionY(*barrel, platform, level, delta, &y);
 
 		if (barrel->ladderFlag == 0 && colissionFlag == 0)
-			barrel->verticalVelocity += 1.0;
+			barrel->verticalVelocity += barrelGravity;
 
 		if (colissionFlag == 1)
 		{
