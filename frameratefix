@@ -25,6 +25,7 @@ const int yPlatformOffset = 15; // spawn
 const int yLadderOffset = 13;
 const int yPlayerOffset = 13;
 const int yKongOffset = 12;
+const int yTrophyOffset = 14;
 
 const char* menuText = "WELCOME TO THE GAME";
 const double menuTextScale = 5.0;
@@ -43,6 +44,8 @@ const double barrelGravity = 1.0;
 
 const double throwTimer = 1.2;
 
+const int trophyValue = 500;
+const int barrelValue = 100;
 
 typedef struct menu_t
 {
@@ -75,6 +78,7 @@ typedef struct hitbox_t
 typedef struct player_t
 {
 	char* name;
+	int points;
 	SDL_Surface* sprite;
 	int playerWidth;
 	int playerHeight;
@@ -152,15 +156,29 @@ typedef struct screen_t
 };
 
 
+typedef struct trophy_t
+{
+	SDL_Surface* sprite;
+	int trophyX;
+	int trophyY;
+	int trophyWidth;
+	int trophyHeight;
+	hitbox_t hitbox;
+};
+
+
 typedef struct level_t
 {
 	int levelNum;
 	int platformCount;
 	int ladderCount;
+	int trophyCount;
 	int* platformsX;
 	int* platformsY;
 	int* laddersX;
 	int* laddersY;
+	int* trophiesX;
+	int* trophiesY;
 	int playerSpawn[2];
 	int kongSpawn[2];
 	char rampColor[10];
@@ -202,6 +220,7 @@ typedef struct items_t
 	platform_t* platform;
 	ladder_t* ladder;
 	barrel_t* barrel;
+	trophy_t* trophy;
 
 	sprites_t sprites;
 };
@@ -262,6 +281,18 @@ void initLadderHitbox(ladder_t* ladder);
 ladder_t* allocateLadders(level_t level);
 #pragma endregion
 
+#pragma region trophies
+void initTrophies(trophy_t** trophy, screen_t screen, level_t level);
+void initTrophySprite(trophy_t* trophy, screen_t screen);
+void initTrophySpawn(trophy_t* trophy, level_t level, int index);
+void initTrophyHitbox(trophy_t* trophy);
+trophy_t* allocateTrophies(level_t level);
+
+void updateTrophyPosition(items_t* items, int index);
+
+void handlePoints(items_t* items, level_t level);
+#pragma endregion
+
 #pragma region player
 void initPlayer(items_t* items, screen_t screen, level_t level, char* playerName);
 void initPlayerSprite(items_t* items, screen_t screen);
@@ -309,6 +340,7 @@ void interpretLevelData(level_t* level, char** levelTxt);
 void interpretItemCount(level_t* level, char** levelTxt);
 void allocatePlatformsCoords(level_t* level, int platformCount);
 void allocateLaddersCoords(level_t* level, int ladderCount);
+void allocateTrophyCoords(level_t* level, int trophyCount);
 void interpretItemsPosition(level_t* level, char** levelTxt);
 #pragma endregion
 
@@ -365,6 +397,8 @@ int detectBottomBarrelColissionY(barrel_t barrel, platform_t* platform, level_t 
 
 int detectPlayerBarrelCollision(barrel_t barrel, player_t player, double delta);
 int detectKongCollision(items_t items);
+int detectPlayerTrophyCollision(items_t* items, level_t level);
+int detectPlayerBarrelJump(items_t items);
 #pragma endregion
 
 #pragma region movement
@@ -392,6 +426,8 @@ void freeAll(screen_t* screen, platform_t** platform, ladder_t** ladder, level_t
 void freeSurfaces(screen_t* screen);
 void freePlatforms(platform_t** platform, level_t level);
 void freeLadders(ladder_t** ladder, level_t level);
+//void freeLevel
+//void freeTrophies
 void freeLevelTxt(char** levelTxt);
 #pragma endregion
 
@@ -520,6 +556,7 @@ void initDynamic(screen_t screen, items_t* items, level_t* level, int levelNum, 
 	initPlayer(items, screen, *level, playerName);
 	initKong(items, screen, *level);
 	initBarrels(items, screen);
+	initTrophies(&items->trophy, screen, *level);
 }
 
 
@@ -886,6 +923,7 @@ void initPlayerInfo(player_t* player, char* playerName)
 	player->animationTimer = 0;
 	player->lives = playerLives;
 	player->name = playerName;
+	player->points = 0;
 }
 
 
@@ -1012,7 +1050,8 @@ void writeLevelInfo(char** levelTxt, const char* filePath, level_t* level)
 
 			fileChar = fgetc(file);
 
-			if (fileChar == '#' || fileChar == 'X' || fileChar == 'O' || fileChar == 'H' || fileChar == 'K')
+			if (fileChar == '#' || fileChar == 'X' || fileChar == 'O' ||
+				fileChar == 'H' || fileChar == 'K' || fileChar == 'T')
 				levelTxt[i][j] = fileChar;
 
 			else
@@ -1029,6 +1068,7 @@ void interpretLevelData(level_t* level, char** levelTxt)
 	interpretItemCount(level, levelTxt);
 	allocatePlatformsCoords(level, level->platformCount);
 	allocateLaddersCoords(level, level->ladderCount);
+	allocateTrophyCoords(level, level->trophyCount);
 	interpretItemsPosition(level, levelTxt);
 }
 
@@ -1037,6 +1077,7 @@ void interpretItemCount(level_t* level, char** levelTxt)
 {
 	int platformCount = 0;
 	int ladderCount = 0;
+	int trophyCount = 0;
 
 	for (int i = 0; i < levelHeight; i++)
 	{
@@ -1051,11 +1092,17 @@ void interpretItemCount(level_t* level, char** levelTxt)
 			{
 				ladderCount++;
 			}
+
+			if (levelTxt[i][j] == 'T' || levelTxt[i][j] == 't')
+			{
+				trophyCount++;
+			}
 		}
 	}
 
 	level->platformCount = platformCount;
 	level->ladderCount = ladderCount;
+	level->trophyCount = trophyCount;
 }
 
 
@@ -1085,10 +1132,24 @@ void allocateLaddersCoords(level_t* level, int ladderCount)
 }
 
 
+void allocateTrophyCoords(level_t* level, int trophyCount)
+{
+	level->trophiesX = (int*)malloc(trophyCount * sizeof(int));
+	level->trophiesY = (int*)malloc(trophyCount * sizeof(int));
+
+	if (level->trophiesX == NULL || level->trophiesY == NULL)
+	{
+		perror("Error - error allocating memory for level trophy info");
+		exit(EXIT_FAILURE);
+	}
+}
+
+
 void interpretItemsPosition(level_t* level, char** levelTxt)
 {
 	int platformCounter = 0;
 	int ladderCounter = 0;
+	int trophyCounter = 0;
 
 	for (int i = 0; i < levelHeight; i++)
 	{
@@ -1119,6 +1180,13 @@ void interpretItemsPosition(level_t* level, char** levelTxt)
 				level->laddersX[ladderCounter] = (j + 1) * xModifier;
 
 				ladderCounter++;
+				break;
+
+			case 'T':
+				level->trophiesY[trophyCounter] = (i + yTrophyOffset) * yModifier;
+				level->trophiesX[trophyCounter] = (j + 1) * xModifier;
+
+				trophyCounter++;
 				break;
 			}
 		}
@@ -1243,7 +1311,7 @@ void initBarrelHitbox(barrel_t* barrel)
 	barrel->hitbox.top = barrel->barrelY - (barrel->barrelHeight / 2);
 	barrel->hitbox.bottom = barrel->barrelY + (barrel->barrelHeight / 2);
 	barrel->hitbox.left = barrel->barrelX - (barrel->barrelWidth / 2);
-	barrel->hitbox.right = barrel->barrelX - (barrel->barrelWidth / 2);
+	barrel->hitbox.right = barrel->barrelX + (barrel->barrelWidth / 2);
 }
 
 
@@ -1251,6 +1319,56 @@ void initBarrelVelocity(barrel_t* barrel)
 {
 	barrel->verticalVelocity = 0;
 	barrel->horizontalVelocity = 0;
+}
+
+
+void initTrophies(trophy_t** trophy, screen_t screen, level_t level)
+{
+	*trophy = allocateTrophies(level);
+
+	for (int i = 0; i < level.trophyCount; i++)
+	{
+		initTrophySprite(&(*trophy)[i], screen);
+		initTrophySpawn(&(*trophy)[i], level, i);
+		initTrophyHitbox(&(*trophy)[i]);
+	}
+}
+
+
+trophy_t* allocateTrophies(level_t level)
+{
+	trophy_t* trophy = (trophy_t*)malloc(level.trophyCount * sizeof(trophy_t));
+	if (trophy == NULL)
+	{
+		perror("Error - error allocating memory for trophies");
+		exit(EXIT_FAILURE);
+	}
+
+	return trophy;
+}
+
+
+void initTrophySprite(trophy_t* trophy, screen_t screen)
+{
+	trophy->sprite = initBMP(&screen, "./DonkeyKongTextures2/trophy.bmp");
+	trophy->trophyWidth = trophy->sprite->w;
+	trophy->trophyHeight = trophy->sprite->h;
+}
+
+
+void initTrophySpawn(trophy_t* trophy, level_t level, int index)
+{
+	trophy->trophyY = level.trophiesY[index];
+	trophy->trophyX = level.trophiesX[index];
+}
+
+
+void initTrophyHitbox(trophy_t* trophy)
+{
+	trophy->hitbox.top = trophy->trophyY - (trophy->trophyHeight / 2);
+	trophy->hitbox.bottom = trophy->trophyY + (trophy->trophyHeight / 2);
+	trophy->hitbox.left = trophy->trophyX - (trophy->trophyWidth / 2);
+	trophy->hitbox.right = trophy->trophyX - (trophy->trophyWidth / 2);
 }
 
 
@@ -1395,7 +1513,7 @@ void drawGameMenu(screen_t screen, colors_t colors, items_t items, double worldT
 
 	drawString(screen, SCREEN_WIDTH / 2 - 4 * strlen(items.player.name), SCREEN_HEIGHT / 10 / 2, items.player.name, 1);
 
-	sprintf(text, "%.1lf", worldTime);
+	sprintf(text, "Time : %.1lf    Points : %d", worldTime, items.player.points);
 	drawString(screen, SCREEN_WIDTH / 2 - 4 * strlen(text), SCREEN_HEIGHT / 15 / 2, text, 1);
 }
 
@@ -1409,6 +1527,14 @@ void drawScene(screen_t screen, colors_t colors, items_t items, level_t level, d
 
 	for (int i = 0; i < level.ladderCount; i++)
 		drawSurface(screen, items.ladder[i].sprite, items.ladder[i].ladderX, items.ladder[i].ladderY);
+
+	for (int i = 0; i < level.trophyCount; i++)
+	{
+		if (items.trophy[i].trophyX == 0 && items.trophy[i].trophyY == 0)
+			continue;
+
+		drawSurface(screen, items.trophy[i].sprite, items.trophy[i].trophyX, items.trophy[i].trophyY);
+	}
 
 	drawSurface(screen, items.player.sprite, items.player.playerX, items.player.playerY);
 
@@ -1959,6 +2085,8 @@ void physics(items_t* items, level_t level, screen_t screen, double delta, int* 
 			handleHit(items, commands, screen, quit);
 	}
 
+	handlePoints(items, level);
+
 	if (detectKongCollision(*items) == 1)
 		handleEnd(commands, quit, level);
 }
@@ -2215,7 +2343,7 @@ int detectBottomBarrelColissionY(barrel_t barrel, platform_t* platform, level_t 
 		if (barrel.hitbox.bottom != platform[i].hitbox.top && checkInRange(barrel.hitbox.bottom + int(barrel.verticalVelocity * delta), T, B) != 0)
 			continue;
 
-		else if (checkInRange(barrel.hitbox.left, L, R) == 1 || checkInRange(barrel.hitbox.right, L, R) == 1 && checkInRange(barrel.barrelX, L, R) == 1)
+		else if (checkInRange(barrel.hitbox.left, L, R) == 1 && checkInRange(barrel.hitbox.right, L, R) == 1 && checkInRange(barrel.barrelX, L, R) == 1)
 			continue;
 
 		else
@@ -2300,6 +2428,60 @@ int detectPlayerBarrelCollision(barrel_t barrel, player_t player, double delta)
 	return 0;
 }
 
+
+int detectPlayerTrophyCollision(items_t* items, level_t level)
+{
+	for (int i = 0; i < level.trophyCount; i++)
+	{
+		if (checkInRange(items->player.playerX, items->trophy[i].hitbox.left, items->trophy[i].hitbox.right) == 0 &&
+			checkInRange(items->player.playerY, items->trophy[i].hitbox.top, items->trophy[i].hitbox.bottom) == 0)
+		{
+			updateTrophyPosition(items, i);
+			return 1;
+		}
+	}
+	
+	return 0;
+}
+
+
+void updateTrophyPosition(items_t* items, int index)
+{
+	(&items->trophy[index])->trophyY = 0;
+	(&items->trophy[index])->trophyX = 0;
+
+	(&items->trophy[index])->hitbox.top = 0;
+	(&items->trophy[index])->hitbox.bottom = 0;
+	(&items->trophy[index])->hitbox.left = 0;
+	(&items->trophy[index])->hitbox.right = 0;
+
+}
+
+
+int detectPlayerBarrelJump(items_t items)
+{
+	for (int i = 0; i < barrelCount; i++)
+	{
+		if (items.barrel[i].throwFlag == 1)
+		{
+			if (checkInRange(items.player.playerX, items.barrel[i].hitbox.left, items.barrel[i].hitbox.right) == 0 &&
+				checkInRange(items.player.playerY, items.barrel[i].hitbox.top - 20, items.trophy[i].hitbox.bottom - 20) == 0)
+			{
+				return 1;
+			}
+		}
+	}
+}
+
+
+void handlePoints(items_t* items, level_t level)
+{
+	if (detectPlayerTrophyCollision(items, level) == 1)
+		(&items->player)->points += trophyValue;
+
+	if (detectPlayerBarrelJump(*items) == 1)
+		(&items->player)->points += barrelValue;
+}
 
 void resetCommands(commands_t* commands)
 {
