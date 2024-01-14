@@ -90,6 +90,8 @@ typedef struct player_t
 	int lives;
 	int ladderFlag;
 	int jumpFlag;
+	int pointFlag;
+	double pointTimer;
 	double animationTimer;
 };
 
@@ -924,6 +926,8 @@ void initPlayerInfo(player_t* player, char* playerName)
 	player->lives = playerLives;
 	player->name = playerName;
 	player->points = 0;
+	player->pointFlag = 0;
+	player->pointTimer = 0;
 }
 
 
@@ -1670,6 +1674,11 @@ void updateSprites(items_t* items, double delta)
 	(&items->player)->animationTimer += delta;
 	(&items->kong)->animationTimer += delta;
 
+	if (items->player.pointFlag == 1)
+		(&items->player)->pointTimer += delta;
+	else
+		(&items->player)->pointTimer = 0;
+
 	updatePlayerSprite(items);
 	updateKongSprite(items);
 
@@ -2240,6 +2249,7 @@ void gravity(player_t* player, platform_t* platform, level_t level)
 		player->verticalVelocity = 0;
 		player->ladderFlag = 0;
 		player->jumpFlag = 0;
+		player->pointFlag = 1;
 	}
 }
 
@@ -2462,15 +2472,17 @@ int detectPlayerBarrelJump(items_t items)
 {
 	for (int i = 0; i < barrelCount; i++)
 	{
-		if (items.barrel[i].throwFlag == 1)
+		if (items.barrel[i].throwFlag == 1 && items.player.pointFlag == 1)
 		{
 			if (checkInRange(items.player.playerX, items.barrel[i].hitbox.left, items.barrel[i].hitbox.right) == 0 &&
-				checkInRange(items.player.playerY, items.barrel[i].hitbox.top - 20, items.trophy[i].hitbox.bottom - 20) == 0)
+				checkInRange(items.player.playerY, items.barrel[i].hitbox.top - 2 * items.barrel[i].barrelHeight, items.barrel[i].hitbox.top) == 0)
 			{
 				return 1;
 			}
 		}
 	}
+
+	return 0;
 }
 
 
@@ -2480,7 +2492,10 @@ void handlePoints(items_t* items, level_t level)
 		(&items->player)->points += trophyValue;
 
 	if (detectPlayerBarrelJump(*items) == 1)
+	{
 		(&items->player)->points += barrelValue;
+		(&items->player)->pointFlag = 0;
+	}
 }
 
 void resetCommands(commands_t* commands)
