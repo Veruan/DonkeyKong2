@@ -46,6 +46,7 @@ const double throwTimer = 1.2;
 
 const int trophyValue = 500;
 const int barrelValue = 100;
+const int levelValue = 1000;
 
 typedef struct menu_t
 {
@@ -91,6 +92,7 @@ typedef struct player_t
 	int ladderFlag;
 	int jumpFlag;
 	int pointFlag;
+	int pointGrabbed;
 	double pointTimer;
 	double animationTimer;
 };
@@ -418,6 +420,8 @@ void handleRightMovSprite(items_t* items);
 void handleLeftMovSprite(items_t* items);
 void handleJumpSprite(items_t* items);
 void handleLadderSprite(items_t* items);
+void handlePlayerPoint(player_t player, screen_t screen);
+void pointInfo(items_t* items, double delta);
 
 void updateKongSprite(items_t* items);
 #pragma endregion
@@ -477,8 +481,10 @@ void generalLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t 
 		{
 			playerName = items.player.name;
 			int playerLives = items.player.lives;
+			int playerPoints = items.player.points;
 			initDynamic(screen, &items, &level, levelNum, playerName);
 			(&items.player)->lives = playerLives;
+			(&items.player)->points = playerPoints;
 		}
 
 		if (commands->quit == 1)
@@ -492,8 +498,11 @@ void generalLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t 
 		{
 			playerName = items.player.name;
 			int playerLives = items.player.lives;
+			int playerPoints = items.player.points + levelValue;
 			initDynamic(screen, &items, &level, level.levelNum + 1, playerName);
 			(&items.player)->lives = playerLives;
+			(&items.player)->points = playerPoints;
+
 		}
 
 		resetCommands(commands);
@@ -928,6 +937,7 @@ void initPlayerInfo(player_t* player, char* playerName)
 	player->points = 0;
 	player->pointFlag = 0;
 	player->pointTimer = 0;
+	player->pointGrabbed = 0;
 }
 
 
@@ -1542,12 +1552,27 @@ void drawScene(screen_t screen, colors_t colors, items_t items, level_t level, d
 
 	drawSurface(screen, items.player.sprite, items.player.playerX, items.player.playerY);
 
+	handlePlayerPoint(items.player, screen);
+
 	for (int i = 0; i < barrelCount; i++)
 		drawSurface(screen, items.barrel[i].sprite, items.barrel[i].barrelX, items.barrel[i].barrelY);
 
 	drawSurface(screen, items.kong.sprite, items.kong.kongX, items.kong.kongY);
 
 	drawGameMenu(screen, colors, items, worldTime);
+}
+
+
+void handlePlayerPoint(player_t player, screen_t screen)
+{
+	char text[12] = { '\0' };
+
+	if (player.pointGrabbed > 0 && player.pointTimer <= 1.0)
+	{
+		snprintf(text, sizeof(text), "%d", player.pointGrabbed);
+
+		drawString(screen, player.playerX - 12, player.hitbox.top - 8, text, 1.0);
+	}
 }
 
 
@@ -1674,10 +1699,7 @@ void updateSprites(items_t* items, double delta)
 	(&items->player)->animationTimer += delta;
 	(&items->kong)->animationTimer += delta;
 
-	if (items->player.pointFlag == 1)
-		(&items->player)->pointTimer += delta;
-	else
-		(&items->player)->pointTimer = 0;
+	pointInfo(items, delta);
 
 	updatePlayerSprite(items);
 	updateKongSprite(items);
@@ -1699,6 +1721,18 @@ void updateSprites(items_t* items, double delta)
 			else
 				(&(*(&items->barrel))[i])->sprite = items->sprites.barrel1;
 		}
+	}
+}
+
+
+void pointInfo(items_t* items, double delta)
+{
+	if (items->player.pointGrabbed > 0 && (&items->player)->pointTimer <= 1.0)
+		(&items->player)->pointTimer += delta;
+	else
+	{
+		(&items->player)->pointTimer = 0;
+		(&items->player)->pointGrabbed = 0;
 	}
 }
 
@@ -2489,14 +2523,20 @@ int detectPlayerBarrelJump(items_t items)
 void handlePoints(items_t* items, level_t level)
 {
 	if (detectPlayerTrophyCollision(items, level) == 1)
+	{
 		(&items->player)->points += trophyValue;
+		(&items->player)->pointGrabbed = trophyValue;
+	}
 
 	if (detectPlayerBarrelJump(*items) == 1)
 	{
 		(&items->player)->points += barrelValue;
+		(&items->player)->pointGrabbed = barrelValue;
 		(&items->player)->pointFlag = 0;
 	}
+
 }
+
 
 void resetCommands(commands_t* commands)
 {
