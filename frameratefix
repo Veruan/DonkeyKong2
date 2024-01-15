@@ -240,6 +240,10 @@ typedef struct commands_t
 
 
 void generalLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t colors, level_t level, items_t items, commands_t* commands, int levelNum, char* playerName);
+void handleMainMenu(screen_t* screen, colors_t* colors, items_t* items, level_t* level, int* levelNum, char** playerName);
+void handleRestart(char** playerName, items_t* items, screen_t* screen, level_t* level);
+void handleNextLevel(char** playerName, items_t* items, screen_t* screen, level_t* level);
+void handleQuit(screen_t* screen, items_t* items, level_t* level);
 
 void initAll(screen_t* screen, colors_t* colors, level_t* level, items_t* items, int* levelNumber, char** playerName);
 
@@ -357,10 +361,12 @@ void drawLine(screen_t screen, int x, int y, int l, int dx, int dy, Uint32 color
 void drawRectangle(screen_t screen, int x, int y, int width, int height, Uint32 outlineColor, Uint32 fillColor);
 void drawGameMenu(screen_t screen, colors_t colors, items_t items, double worldTime);
 void drawScene(screen_t screen, colors_t colors, items_t items, level_t level, double worldTime);
+void drawStaticItems(screen_t screen, items_t items, level_t level);
+void drawDynamicItems(screen_t screen, items_t items);
 void draw(screen_t screen, colors_t colors, items_t items, level_t level, double worldTime);
 void drawHit(items_t items, screen_t screen);
-// rysowanie linii o d³ugoœci l w pionie (gdy dx = 0, dy = 1) 
-// b¹dŸ poziomie (gdy dx = 1, dy = 0)
+// rysowanie linii o długości l w pionie (gdy dx = 0, dy = 1) 
+// bądź poziomie (gdy dx = 1, dy = 0)
 // draw a vertical (when dx = 0, dy = 1) or horizontal (when dx = 1, dy = 0) line
 #pragma endregion
 
@@ -370,11 +376,12 @@ void handleY(player_t player, double* distanceY, double delta);
 void handleXY(player_t player, double* distanceX, double* distanceY, double delta);
 #pragma endregion
 
-void gameLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t colors, level_t level, items_t* items, commands_t* commands);
+void gameLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t colors, level_t* level, items_t* items, commands_t* commands);
+void handleTime(double t1, double* t2, double* delta, double* worldTime, int* quit, items_t* items);
 
 #pragma region events
-void eventHandler(int* quit, player_t* player, platform_t* platform, ladder_t* ladder, SDL_Event event, level_t level, commands_t* commands);
-void handleKeyDown(SDL_Event event, int* quit, player_t* player, platform_t* platform, ladder_t* ladder, level_t level, commands_t* commands);
+void eventHandler(int* quit, player_t* player, platform_t* platform, ladder_t* ladder, SDL_Event event, level_t* level, commands_t* commands);
+void handleKeyDown(SDL_Event event, int* quit, player_t* player, platform_t* platform, ladder_t* ladder, level_t* level, commands_t* commands);
 
 void handleHit(items_t* items, commands_t* commands, screen_t screen, int* quit);
 void handleEnd(commands_t* commands, int* quit, level_t level);
@@ -413,6 +420,12 @@ void enterLadder(player_t* player, double modifier);
 #pragma endregion
 
 #pragma region animation
+void initPlayerMovementSprites(screen_t screen, sprites_t* sprites);
+void initPlayerSpecialSprites(screen_t screen, sprites_t* sprites);
+
+void initKongSprites(screen_t screen, sprites_t* sprites);
+void initAssetSprites(screen_t screen, sprites_t* sprites);
+
 void updateSprites(items_t* items, double delta);
 
 void updatePlayerSprite(items_t* items);
@@ -424,16 +437,22 @@ void handlePlayerPoint(player_t player, screen_t screen);
 void pointInfo(items_t* items, double delta);
 
 void updateKongSprite(items_t* items);
+
+void updateBarrelSprite(items_t* items, double delta);
 #pragma endregion
 
 #pragma region free
 void resetCommands(commands_t* commands);
-void freeAll(screen_t* screen, platform_t** platform, ladder_t** ladder, level_t level);
+void freeAll(screen_t* screen, items_t* items, level_t* level);
+void freeLevelInfo(level_t* level);
 void freeSurfaces(screen_t* screen);
-void freePlatforms(platform_t** platform, level_t level);
-void freeLadders(ladder_t** ladder, level_t level);
-//void freeLevel
-//void freeTrophies
+void freePlatforms(platform_t** platform);
+void freeLadders(ladder_t** ladder);
+void freeTrophies(trophy_t** trophy);
+void freeLevelSurfaces(sprites_t* sprites, items_t* items);
+void freePlayerSprites(sprites_t* sprites);
+void freeEnemySprites(sprites_t* sprites);
+
 void freeLevelTxt(char** levelTxt);
 #pragma endregion
 
@@ -468,45 +487,70 @@ void generalLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t 
 {
 	while (1)
 	{
-		gameLoop(t1, screen, text, event, colors, level, &items, commands);
+		gameLoop(t1, screen, text, event, colors, &level, &items, commands);
 
 		if (commands->menu == 1)
 		{
-			SDL_Quit();
-			freeAll(&screen, &items.platform, &items.ladder, level);
-			initAll(&screen, &colors, &level, &items, &levelNum, &playerName);
+			handleMainMenu(&screen, &colors, &items, &level, &levelNum, &playerName);
 		}
 
 		if (commands->restart == 1)
 		{
-			playerName = items.player.name;
-			int playerLives = items.player.lives;
-			int playerPoints = items.player.points;
-			initDynamic(screen, &items, &level, levelNum, playerName);
-			(&items.player)->lives = playerLives;
-			(&items.player)->points = playerPoints;
+			handleRestart(&playerName, &items, &screen, &level);
 		}
 
 		if (commands->quit == 1)
 		{
-			SDL_Quit();
-			freeAll(&screen, &items.platform, &items.ladder, level);
+			handleQuit(&screen, &items, &level);
 			break;
 		}
 
 		if (commands->startAnother == 1)
 		{
-			playerName = items.player.name;
-			int playerLives = items.player.lives;
-			int playerPoints = items.player.points + levelValue;
-			initDynamic(screen, &items, &level, level.levelNum + 1, playerName);
-			(&items.player)->lives = playerLives;
-			(&items.player)->points = playerPoints;
+			handleNextLevel(&playerName, &items, &screen, &level);
 
 		}
 
 		resetCommands(commands);
 	}
+}
+
+
+void handleMainMenu(screen_t* screen, colors_t* colors, items_t* items, level_t* level, int* levelNum, char** playerName)
+{
+	SDL_Quit();
+	freeAll(screen, items, level);
+	initAll(screen, colors, level, items, levelNum, playerName);
+}
+
+
+void handleRestart(char** playerName, items_t* items, screen_t* screen, level_t* level)
+{
+	*playerName = items->player.name;
+	int playerLives = items->player.lives;
+	int playerPoints = items->player.points;
+	int levelActualNum = level->levelNum;
+	initDynamic(*screen, items, level, levelActualNum, *playerName);
+	(&items->player)->lives = playerLives;
+	(&items->player)->points = playerPoints;
+}
+
+
+void handleNextLevel(char** playerName, items_t* items, screen_t* screen, level_t* level)
+{
+	*playerName = items->player.name;
+	int playerLives = items->player.lives;
+	int playerPoints = items->player.points + levelValue;
+	initDynamic(*screen, items, level, level->levelNum + 1, *playerName);
+	(&items->player)->lives = playerLives;
+	(&items->player)->points = playerPoints;
+}
+
+
+void handleQuit(screen_t* screen, items_t* items, level_t* level)
+{
+	SDL_Quit();
+	freeAll(screen, items, level);
 }
 
 
@@ -667,12 +711,13 @@ int findActive(menu_t menu)
 
 void optionView(int option, screen_t* screen, colors_t colors, SDL_Event event, char** playerName)
 {
-	if (option != menuOptions - 1);
+	if (option != menuOptions - 1)
 	{
 		enterPseudonym(screen, event, colors, playerName);
 	}
 
-	//
+	else if(option == menuOptions - 1)
+		exit(EXIT_SUCCESS);
 
 }
 
@@ -680,31 +725,25 @@ void optionView(int option, screen_t* screen, colors_t colors, SDL_Event event, 
 void enterPseudonym(screen_t* screen, SDL_Event event, colors_t colors, char** playerName)
 {
 	int pseudonymEntered = 0;
-	char base[] = "name : ";
 	char text[20] = "\0";
 	int cursorPos = 0;
+	int x = SCREEN_WIDTH / 2 - SCREEN_WIDTH / 5, y = SCREEN_HEIGHT / 2;
 
 	while (!pseudonymEntered)
 	{
 		drawRectangle(*screen, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, colors.black, colors.black);
-		drawString(*screen, SCREEN_WIDTH / 2 - SCREEN_WIDTH / 5, SCREEN_HEIGHT / 2 - 50, "ENTER YOUR NAME", 3.0);
-		drawString(*screen, SCREEN_WIDTH / 2 - SCREEN_WIDTH / 5, SCREEN_HEIGHT / 2, text, 3.0);
+		drawString(*screen, x, y - 50, "ENTER YOUR NAME", 3.0);
+		drawString(*screen, x, y, text, 3.0);
 		updateScreen(*screen);
 
 		while (SDL_PollEvent(&event))
 		{
-			switch (event.type)
-			{
-			case SDL_KEYDOWN:
+			if (event.type == SDL_KEYDOWN)
 				handleInput(event, &pseudonymEntered, screen, text, &cursorPos);
-			}
 		}
 	}
 
-	if (text[0] == '\0')
-		text[0] = '?';
-
-	*playerName = strdup(text);
+	*playerName = (text[0] == '\0') ? strdup("?") : strdup(text);
 }
 
 
@@ -774,18 +813,34 @@ void drawMenuString(screen_t screen, colors_t colors, const char* text, int y, m
 	drawString(screen, SCREEN_WIDTH / 2 - 4 * int(menuTextScale) * strlen(text), y, text, menuTextScale);
 
 	if (index != titleFlag && menu.active[index] == 1)
-		drawRectangle(screen, SCREEN_WIDTH / 2 - 4 * int(menuTextScale) * strlen(text), y + 8 * int(menuTextScale), strlen(text) * 8 * int(menuTextScale), 3, colors.yellowOrange, colors.yellowOrange);
+		drawRectangle(screen, SCREEN_WIDTH / 2 - 4 * int(menuTextScale) * strlen(text),
+			y + 8 * int(menuTextScale), strlen(text) * 8 * int(menuTextScale), 3, colors.yellowOrange, colors.yellowOrange);
 }
 
 
 void initSprites(screen_t screen, sprites_t* sprites)
+{
+	initPlayerMovementSprites(screen, sprites);
+	initPlayerSpecialSprites(screen, sprites);
+
+	initKongSprites(screen, sprites);
+
+	initAssetSprites(screen, sprites);
+}
+
+
+void initPlayerMovementSprites(screen_t screen, sprites_t* sprites)
 {
 	sprites->Pleft1 = initBMP(&screen, "./DonkeyKongTextures2/playerL1.bmp");
 	sprites->Pleft2 = initBMP(&screen, "./DonkeyKongTextures2/playerL2.bmp");
 
 	sprites->Pright1 = initBMP(&screen, "./DonkeyKongTextures2/playerR1.bmp");
 	sprites->Pright2 = initBMP(&screen, "./DonkeyKongTextures2/playerR2.bmp");
+}
 
+
+void initPlayerSpecialSprites(screen_t screen, sprites_t* sprites)
+{
 	sprites->PjumpLeft = initBMP(&screen, "./DonkeyKongTextures2/playerJL.bmp");
 	sprites->PjumpRight = initBMP(&screen, "./DonkeyKongTextures2/playerJR.bmp");
 
@@ -793,11 +848,19 @@ void initSprites(screen_t screen, sprites_t* sprites)
 	sprites->Pladder2 = initBMP(&screen, "./DonkeyKongTextures2/playerLadder2.bmp");
 
 	sprites->Pdead = initBMP(&screen, "./DonkeyKongTextures2/playerDead.bmp");
+}
 
+
+void initKongSprites(screen_t screen, sprites_t* sprites)
+{
 	sprites->kongStand = initBMP(&screen, "./DonkeyKongTextures2/kong.bmp");
 	sprites->kongThrow = initBMP(&screen, "./DonkeyKongTextures2/kongThrow.bmp");
 	sprites->kongBarrel = initBMP(&screen, "./DonkeyKongTextures2/kongBarrel.bmp");
+}
 
+
+void initAssetSprites(screen_t screen, sprites_t* sprites)
+{
 	sprites->barrel1 = initBMP(&screen, "./DonkeyKongTextures2/barrel1.bmp");
 	sprites->barrel2 = initBMP(&screen, "./DonkeyKongTextures2/barrel2.bmp");
 
@@ -1231,6 +1294,7 @@ void initWindowAndRenderer(screen_t* screen)
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 	SDL_SetWindowTitle(screen->window, "Donkey Kong - 198290");
 	SDL_ShowCursor(SDL_DISABLE);
+	SDL_SetWindowIcon(screen->window, initBMP(screen, "./DonkeyKongTextures2/icon.bmp"));
 
 	screen->screen = SDL_CreateRGBSurface(0, SCREEN_WIDTH, SCREEN_HEIGHT, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 	screen->scrtex = SDL_CreateTexture(screen->renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
@@ -1405,11 +1469,25 @@ SDL_Surface* initBMP(screen_t* screen, char* path)
 }
 
 
-void freeAll(screen_t* screen, platform_t** platform, ladder_t** ladder, level_t level)
+void freeAll(screen_t* screen, items_t* items, level_t* level)
 {
 	freeSurfaces(screen);
-	freePlatforms(platform, level);
-	freeLadders(ladder, level);
+	freeLevelSurfaces(&items->sprites, items);
+	freePlatforms(&items->platform);
+	freeLadders(&items->ladder);
+	freeTrophies(&items->trophy);
+	freeLevelInfo(level);
+}
+
+
+void freeLevelInfo(level_t* level)
+{
+	free(level->laddersX);
+	free(level->laddersY);
+	free(level->platformsX);
+	free(level->platformsY);
+	free(level->trophiesX);
+	free(level->trophiesY);
 }
 
 
@@ -1423,13 +1501,19 @@ void freeSurfaces(screen_t* screen)
 }
 
 
-void freePlatforms(platform_t** platform, level_t level)
+void freeTrophies(trophy_t** trophy)
+{
+	free(*trophy);
+}
+
+
+void freePlatforms(platform_t** platform)
 {
 	free(*platform);
 }
 
 
-void freeLadders(ladder_t** ladder, level_t level)
+void freeLadders(ladder_t** ladder)
 {
 	free(*ladder);
 }
@@ -1536,6 +1620,16 @@ void drawScene(screen_t screen, colors_t colors, items_t items, level_t level, d
 {
 	SDL_FillRect(screen.screen, NULL, colors.darkSky);
 
+	drawStaticItems(screen, items, level);
+	
+	drawDynamicItems(screen, items);
+
+	drawGameMenu(screen, colors, items, worldTime);
+}
+
+
+void drawStaticItems(screen_t screen, items_t items, level_t level)
+{
 	for (int i = 0; i < level.platformCount; i++)
 		drawSurface(screen, items.platform[i].sprite, items.platform[i].platformX, items.platform[i].platformY);
 
@@ -1549,17 +1643,19 @@ void drawScene(screen_t screen, colors_t colors, items_t items, level_t level, d
 
 		drawSurface(screen, items.trophy[i].sprite, items.trophy[i].trophyX, items.trophy[i].trophyY);
 	}
+}
+
+
+void drawDynamicItems(screen_t screen, items_t items)
+{
+	handlePlayerPoint(items.player, screen);
 
 	drawSurface(screen, items.player.sprite, items.player.playerX, items.player.playerY);
-
-	handlePlayerPoint(items.player, screen);
 
 	for (int i = 0; i < barrelCount; i++)
 		drawSurface(screen, items.barrel[i].sprite, items.barrel[i].barrelX, items.barrel[i].barrelY);
 
 	drawSurface(screen, items.kong.sprite, items.kong.kongX, items.kong.kongY);
-
-	drawGameMenu(screen, colors, items, worldTime);
 }
 
 
@@ -1661,28 +1757,21 @@ void handleBarrelX(barrel_t barrel, double* barrelDistanceX, double delta)
 }
 
 
-void gameLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t colors, level_t level, items_t* items, commands_t* commands)
+void gameLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t colors, level_t* level, items_t* items, commands_t* commands)
 {
 	int quit = 0;
 	double t2, delta, frames = 0, distanceX = 0, distanceY = 0, worldTime = 120;
 
 	while (!quit)
 	{
-		t2 = SDL_GetTicks();
-		delta = fmin((t2 - t1) * 0.001, 0.002);
-		t1 = t2;
-		(&items->kong)->timer += delta;
-		if (worldTime <= 0)
-			quit = 1;
-		else
-			worldTime -= delta;
+		handleTime(t1, &t2, &delta, &worldTime, &quit, items);
 
 		handleBarrelThrow(items);
-		physics(items, level, screen, delta, &quit, commands);
+		physics(items, *level, screen, delta, &quit, commands);
 		handleXY(items->player, &distanceX, &distanceY, delta);
 		updateBarrelsPosition((&items->barrel), delta);
 
-		draw(screen, colors, *items, level, worldTime);
+		draw(screen, colors, *items, *level, worldTime);
 
 		eventHandler(&quit, (&items->player), items->platform, items->ladder, event, level, commands);
 
@@ -1691,6 +1780,19 @@ void gameLoop(int t1, screen_t screen, char* text, SDL_Event event, colors_t col
 
 		frames++;
 	}
+}
+
+
+void handleTime(double t1, double* t2, double* delta, double* worldTime, int* quit, items_t* items)
+{
+	*t2 = SDL_GetTicks();
+	*delta = fmin((*t2 - t1) * 0.001, 0.002);
+	t1 = *t2;
+	(&items->kong)->timer += *delta;
+	if (*worldTime <= 0)
+		*quit = 1;
+	else
+		*worldTime -= *delta;
 }
 
 
@@ -1704,6 +1806,12 @@ void updateSprites(items_t* items, double delta)
 	updatePlayerSprite(items);
 	updateKongSprite(items);
 
+	updateBarrelSprite(items, delta);
+}
+
+
+void updateBarrelSprite(items_t* items, double delta)
+{
 	for (int i = 0; i < barrelCount; i++)
 	{
 		if ((&(*(&items->barrel))[i])->throwFlag == 1)
@@ -1920,7 +2028,7 @@ int calculateBarrelKongDistance(barrel_t* barrel, kong_t kong)
 }
 
 
-void eventHandler(int* quit, player_t* player, platform_t* platform, ladder_t* ladder, SDL_Event event, level_t level, commands_t* commands)
+void eventHandler(int* quit, player_t* player, platform_t* platform, ladder_t* ladder, SDL_Event event, level_t* level, commands_t* commands)
 {
 	while (SDL_PollEvent(&event))
 	{
@@ -1943,46 +2051,37 @@ void eventHandler(int* quit, player_t* player, platform_t* platform, ladder_t* l
 }
 
 
-void handleKeyDown(SDL_Event event, int* quit, player_t* player, platform_t* platform, ladder_t* ladder, level_t level, commands_t* commands)
+void handleKeyDown(SDL_Event event, int* quit, player_t* player, platform_t* platform, ladder_t* ladder, level_t* level, commands_t* commands)
 {
 	switch (event.key.keysym.sym)
 	{
-	case SDLK_ESCAPE:
+	case SDLK_ESCAPE: case SDLK_q:
 		*quit = 1;
-		commands->quit = 1;
+		commands->quit = (event.key.keysym.sym == SDLK_ESCAPE);
+		commands->menu = (event.key.keysym.sym == SDLK_q);
 		break;
 
-	case SDLK_n:
+	case SDLK_n: case SDLK_1: case SDLK_2: case SDLK_3:
 		*quit = 1;
 		commands->restart = 1;
+		player->points = 0;
+		level->levelNum = (event.key.keysym.sym == SDLK_n) ? level->levelNum : event.key.keysym.sym - SDLK_1 + 1;
 		break;
 
-	case SDLK_q:
-		*quit = 1;
-		commands->menu = 1;
-		break;
-
-	case SDLK_LEFT:
-		handleMovement(player, 'L', platform, level);
-		break;
-
-	case SDLK_RIGHT:
-		handleMovement(player, 'R', platform, level);
+	case SDLK_LEFT: case SDLK_RIGHT:
+		handleMovement(player, (event.key.keysym.sym == SDLK_LEFT) ? 'L' : 'R', platform, *level);
 		break;
 
 	case SDLK_SPACE:
-		handleJump(player, platform, level);
+		handleJump(player, platform, *level);
 		break;
 
-	case SDLK_UP:
-		handleLadder(player, ladder, level, '+');
-		break;
-
-	case SDLK_DOWN:
-		handleLadder(player, ladder, level, '-');
+	case SDLK_UP: case SDLK_DOWN:
+		handleLadder(player, ladder, *level, (event.key.keysym.sym == SDLK_UP) ? '+' : '-');
 		break;
 	}
 }
+
 
 
 void handleJump(player_t* player, platform_t* platform, level_t level)
@@ -2543,6 +2642,42 @@ void resetCommands(commands_t* commands)
 	commands->menu = 0;
 	commands->quit = 0;
 	commands->restart = 0;
+}
+
+
+void freeLevelSurfaces(sprites_t* sprites, items_t* items)
+{
+	freePlayerSprites(sprites);
+	freeEnemySprites(sprites);
+}
+
+
+void freePlayerSprites(sprites_t* sprites)
+{
+	SDL_FreeSurface(sprites->Pleft1);
+	SDL_FreeSurface(sprites->Pleft2);
+
+	SDL_FreeSurface(sprites->Pright1);
+	SDL_FreeSurface(sprites->Pright2);
+
+	SDL_FreeSurface(sprites->PjumpLeft);
+	SDL_FreeSurface(sprites->PjumpRight);
+
+	SDL_FreeSurface(sprites->Pladder1);
+	SDL_FreeSurface(sprites->Pladder2);
+}
+
+
+void freeEnemySprites(sprites_t* sprites)
+{
+	SDL_FreeSurface(sprites->kongBarrel);
+	SDL_FreeSurface(sprites->kongStand);
+	SDL_FreeSurface(sprites->kongThrow);
+
+	SDL_FreeSurface(sprites->barrel1);
+	SDL_FreeSurface(sprites->barrel2);
+
+	SDL_FreeSurface(sprites->live);
 }
 
 /*
